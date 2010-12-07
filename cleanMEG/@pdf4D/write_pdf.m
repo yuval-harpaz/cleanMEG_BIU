@@ -1,0 +1,53 @@
+function write_pdf(obj, data, pdf_id, chan_label, dr, trig)
+
+% WRITE_PDF write_pdf(obj, data, pdf_id, chan_label, dr, trig)
+% data - channel by latency matrix
+% pdf_id - filename for the new pdf (the rest of ids taken from the obj)
+% chan_label - cell array of channel names
+% dr - digitization rate [Hz]
+% trig - trigger onset [sec]
+
+% Nov-2008 error checks by MA.
+
+if ispc, dirSeparator='\';
+else dirSeparator='/';
+end
+
+if ispc
+    error('MEGanalysis:improperOperation','Cannot do this in Windows')
+end
+
+%tmp file for msi data (name includes date and time)
+tmp_file = [dirSeparator 'tmp' dirSeparator 'pdf4D' sprintf('.%d', fix(clock))];
+
+fid=fopen(tmp_file,'w');
+if fid<0
+    error('MEGanalysis:fileOperation', ['couldnot open: ' tmpFile]);
+end
+%number of channels, number of time points
+fprintf(fid, '%d\n%d\n', size(data,1), size(data,2));
+
+%channel names
+for ch = 1:length(chan_label)
+    fprintf(fid, '\t%s', chan_label{ch});
+end
+fprintf(fid, '\n');
+
+%ascii data
+for ti = 1:size(data, 2)
+    fprintf(fid, '\t%d', data(:,ti));
+    fprintf(fid, '\n');
+end
+
+fclose(fid);
+
+%command to run asc_to_pdf
+run_asc_to_pdf = sprintf( ...
+    ['asc_to_pdf -P "%s" -S "%s" -s "%s" -r "%s" -o "%s" ', ...
+     '-f %s -R %f -T %f > /dev/null \n'], ...
+    get(obj, 'patient'), get(obj, 'scan'), get(obj, 'session'), ...
+    get(obj, 'run'), pdf_id, tmp_file, dr, trig);
+[stat, msg] = unix(run_asc_to_pdf);
+
+%clean up
+delete(tmp_file);
