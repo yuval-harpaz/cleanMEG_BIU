@@ -1,2 +1,6 @@
 cleanMEG
-abeles' method for cleaning MEG data at BIU
+Professor Abeles' method for cleaning MEG data at Bar Ilan University
+cleans the data of 50Hz + harmonics based on line power recording.
+cleans the data of building vibrations based on accelerometers recording.
+cleans the data based on reference channels, applying different sets of weights for different frequencies.
+clean the heart bit (does not always work).
