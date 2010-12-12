@@ -3,7 +3,7 @@ Professor Abeles' method for cleaning MEG data at Bar Ilan University, Israel.
 cleans the data of 50Hz + harmonics based on line power recording.
 cleans the data of building vibrations based on accelerometers recording.
 cleans the data based on reference channels, applying different sets of weights for different frequencies.
-clean the heart bit (does not always work).
+cleans the heart bit artifact (does not always work).
 
 The code includes pdf4D pack for reading and writing 4D-neuroimaging format data files.
 to use pdf4D independently see: http://biomag.wikidot.com/msi-matlab
