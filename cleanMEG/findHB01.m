@@ -22,15 +22,19 @@ function [wherisHB, zTime, Errors, amplitudes, meanBeat] = findHB01(mMEG, sampli
 %  Dec 2009 - tested and algorithm modified, VERIFY aded.
 %  Jan 2010 - Position of zTime closer to start of cycle
 %  Nov 2010 - amplitudes of initial peaks are tested and returned in Errors
+%  Dec 2010 - Bug in computing HBperiod in samples - fixed
+%             data is first filtered 4-50 Hz) for finding QRS position, and
+%             then the mean cycle is computed on the unaltered data. 
+%             test for inverted QRS. 
+%             If the bigest peaks are negative the entire signal is
+%             inverted.  MA
 
 %% initialize
 % internal parameters to be put as varargin in later stage
 numSD=2.5;       % above that it is a QRS complex
-minPeakSize=2.7; % below trhat it is not true qrs peak
-slowest = 1.4;   % lowest limit of HB period
-fastest = 0.7;   % highest limit of HB period
-biggest = 2.1;   % highest amplitude of QRS
-smallest = 0.3;  % lowest amplitude of QRS
+minPeakSize=2.7; % below that it is not true qrs peak
+biggest = 2;   % highest amplitude of QRS
+smallest = 0.5;  % lowest amplitude of QRS
 
 % test for missing input parameters
 if ~exist('toPlot','var'), toPlot=[]; end
@@ -59,11 +63,19 @@ if lastSample/samplingRate <25
 end
 if ~exist('HBperiod','var'), HBperiod=[]; end
 if isempty(HBperiod), HBperiod=1.1; end % estimate of the heart HBperiod
+slowest = 1.7*HBperiod;   % lowest limit of HB period
+fastest = 0.5*HBperiod;   % highest limit of HB period
 
-beatPeriod = round(1.2*samplingRate/HBperiod);
+beatPeriod = round(1.2*samplingRate*HBperiod);
 thirdBeat = round(beatPeriod/3);
 meanBeat = zeros(1,beatPeriod+1);
 n=0;
+
+%% filter the data to eliminate slow drifts and fast noise
+BandPassSpecObj=fdesign.bandpass('Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
+2,4,50,100,60,1,60,samplingRate);
+BandPassFilt=design(BandPassSpecObj  ,'butter');
+mMEGf = myFilt(mMEG,BandPassFilt);
 
 %% find where are the hart beats
 startSample=thirdBeat;
@@ -71,10 +83,10 @@ endSample = startSample+beatPeriod;
 numBeats = ceil(length(mMEG)/(thirdBeat));
 pSize = nan(1,numBeats);
 while endSample<lastSample-beatPeriod
-    MEGpiece=mMEG(startSample:endSample);
+    MEGpiece=mMEGf(startSample:endSample);
     peak=find(MEGpiece == max(MEGpiece),1);
     strt=startSample+peak-thirdBeat;
-    meanBeat = meanBeat+mMEG(strt:strt+beatPeriod);
+    meanBeat = meanBeat+mMEGf(strt:strt+beatPeriod);
     startSample = startSample+peak+thirdBeat;
     endSample = startSample+beatPeriod;
     n = n+1;
@@ -89,10 +101,16 @@ QRS = meanBeat(maxm-range:maxm+range);
 QRS = QRS/sqrt(sum(QRS.*QRS));
 
 %% find the position of heart beats more precisely and recompute the meanBeat
-sMEG = conv(QRS,mMEG);
+sMEG = conv(QRS,mMEGf);
 sMEG = sMEG(range:end-range+1);
 % we assume that QRS is pointing up!
 [amplitudes, Ipeaks] = findPeaks(sMEG,numSD,thirdBeat); % find peaks >4*sd of signal
+[amplitudesN, IpeaksN] = findPeaks(-sMEG,numSD,thirdBeat); % find negative peaks
+if mean(amplitudesN) > mean(amplitudes) % invert
+    amplitudes = amplitudesN;
+    Ipeaks = IpeaksN;
+    sMEG = -sMEG;
+end
 % check for errors
 mni = min(diff(Ipeaks))/samplingRate;
 if mni<0.25
@@ -142,21 +160,21 @@ wherisHB = QRSindx;
 if verify
     % check for timing
     dHB = diff(wherisHB);
-    HBperiod = mean(dHB);
-    if max(dHB)>slowest*HBperiod
-        whereSlow = wherisHB(dHB>=slowest*HBperiod)/samplingRate;
+    % HBperiod = mean(dHB);
+    if max(dHB)>slowest*samplingRate
+        whereSlow = wherisHB(dHB>=slowest*samplingRate)/samplingRate;
         warning('MATLAB:MEGanalysis:unreasonableValue',...
             ['Too slow Heart beat periods in ' num2str(whereSlow')]);
         Errors.longHB = whereSlow';
     end
-    if min(dHB)<fastest*HBperiod
-        whereFast = wherisHB(dHB<=fastest*HBperiod)/samplingRate;
+    if min(dHB)<fastest*samplingRate
+        whereFast = wherisHB(dHB<=fastest*samplingRate)/samplingRate;
         warning('MATLAB:MEGanalysis:unreasonableValue',...
             ['Too fast Heart beat periods in ' num2str(whereFast')]);
         Errors.shortHB = whereFast';
     end
     % check for amplitudes
-    peaks = mMEG(wherisHB);
+    peaks = sMEG(wherisHB);
     meanPeak = mean(peaks);
     whereSmall = wherisHB(peaks<smallest*meanPeak)/samplingRate;
     if ~isempty(whereSmall)
