@@ -502,12 +502,12 @@ if isempty(chix)&& doXclean
 end
 if ~isempty(chix)
     chnx = channel_name(pIn,chix);
-    [~, chixSorted] = sortMEGnames(chnx,chix);
+    [Tilda, chixSorted] = sortMEGnames(chnx,chix);
 end
 chie = channel_index(pIn,'EEG');
 if ~isempty(chie)
     che = channel_name(pIn,chie);
-    [~, chieSorted] = sortMEGnames(che,chie);
+    [Tilda, chieSorted] = sortMEGnames(che,chie);
     numEEGchans = length(che);
 end
 
