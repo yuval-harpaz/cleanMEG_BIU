@@ -201,8 +201,17 @@ if verify
 end
 
 %% improve the zTime by finding the center of gravity of the peak.
-lHB = find(meanBeat>=meanBeat(zTime)/2,1); % half height to the left
-rHB = find(meanBeat>=meanBeat(zTime)/2,1,'last'); % half height to the right
+% simetimes the QRS is small relative to P and T waves - so consider only
+% the immedu=iate neghbourhood of zTime
+dZ = ceil(length(QRS)/2);
+zBefore = dZ;
+zAfter =  dZ;
+meanBeat = meanBeat-mean(meanBeat); % when filter is at 0.1 Hz the whole 
+%                                     mean may ride on DC
+zNeighbor = (zTime-zBefore):(zTime+zAfter);
+mQRS = meanBeat(zNeighbor);
+lHB = find(mQRS>=mQRS(zBefore)/2,1) +zTime-zBefore; % half height to the left
+rHB = find(mQRS>=mQRS(zBefore)/2,1,'last') +zTime-zBefore; % half height to the right
 % tests show that the peak coordination is with -1
 zTime = round(sum(meanBeat(lHB:rHB).*(lHB:rHB))/sum(meanBeat(lHB:rHB)))-1;
 
