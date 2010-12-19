@@ -1,4 +1,4 @@
-             Instruct.txt
+original is Instruct.txt, written for createCleanFileF
 Instruction for off-line cleaning MEG data
 08-Nov-2010
 
@@ -11,7 +11,7 @@ Move to the cleanMEG directory:
       'Method','Adaptive' , 'xClean',[4,5,6], 'chans2ignore',[74,204] ,...
       'byFFT',1 , 'HeartBeat',0.9);
 Use 
->> help createCleanFileF 
+>> help createCleanFileG 
 to understand what the various options are.
 
 This will produce a file named:  'xc,cf,hb,lf_c,rfhp1.0Hz'
@@ -21,7 +21,7 @@ If you use 'byFFT',1 then save the resulting  cleanCoefs  in the future
 they wii be needed for source localization.
 
 
-If you donot want to clean by Heart-Beats use
+If you do not want to clean by Heart-Beats use
     'HeartBeat',0
 If you do not want to clean by FFT use
     'byFFT',0
