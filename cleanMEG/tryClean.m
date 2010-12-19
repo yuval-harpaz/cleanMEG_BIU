@@ -81,7 +81,7 @@ if mVv > outLierMargin
     end
 end
 % sometimes the last value is HUGE??
-[~,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
+[Tilda,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
 if ~isempty(junkData)
     endI = startI + size(MEG,2)-1;
     warning('MATLAB:MEGanalysis:nonValidData', ...
@@ -159,7 +159,7 @@ if doLineF
         end
     end
     % sometimes the last value is HUGE??
-    [~,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
+    [Tilda,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
     if ~isempty(junkData)
         endI = startI + size(MEG,2)-1;
         warning('MATLAB:MEGanalysis:nonValidData', ...
@@ -221,9 +221,9 @@ if doLineF
     for nc = chans2analyze
         x=MEG(nc,:);
         if Global
-            [y,~] = cleanMean(x, whereUp, MEGlfCycle(nc,:), 1, []);
+            [y,Tilda] = cleanMean(x, whereUp, MEGlfCycle(nc,:), 1, []);
         elseif Adaptive
-            [y, ~] = cleanLineF(x, whereUp, [], 'Adaptive');
+            [y, Tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
             % define the array of means
 %         elseif phasePrecession % must be phase precession
 %             y = cleanLineF(x, whereUp, [], 'phasePrecession');
@@ -239,7 +239,7 @@ if doLineF
             if Global
                 y = cleanMean(x, whereUp, XTRlfCycle(nc,:), 1, []);
             elseif Adaptive
-                [y, ~] = cleanLineF(x, whereUp, [], 'Adaptive');
+                [y, Tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
                 % define the array of means
 %             elseif phasePrecession % must be phase precession
 %                 y = cleanLineF(x, whereUp, [], 'phasePrecession');
