@@ -1,3 +1,5 @@
+see updates below
+
 original is Instruct.txt, written for createCleanFileF
 Instruction for off-line cleaning MEG data
 08-Nov-2010
@@ -34,3 +36,31 @@ ignore them.  A warning message is issued in this case.  Ignored
 channels are left as they are without any cleaning.
 
 M Abeles
+
+updates for createCleanFileG
+2-Jan-2010
+1.  A few bugs in HB cleaning that caused it to fail occasionaly (when HB was 
+    close to the end or the begining) - fixed.
+2.  Big step like artifacts are detected and corrected for computing the mean HB.
+3.  Big step like artifacts may be overcome in the data by a new option:
+    'stepCorrect',1  The position of the step is notified. The correction is not 
+    perfect a small "spike" remains at the start of the step.
+4.  Only one trig bit is used for 50 Hz cleaning.  If you specify 2 bits the 2nd 
+    one is ignored and a warning message is issued.
+5.  Excessive trig - bits may be erased in the cleaned file. new option: 
+    'maskTrigBits'
+6.  If HB was cleaned the cleaned mean trace is plotted on the top of the initial 
+    plot.
+7.  If the file is big, the cleaning is done one piece at a time.  The size of this
+    piece was increased.  If it causes "out of memory" error you may specify smaller 
+    pieces by the option:
+    'Memory'
+
+I have tried the program on all the data pieces I had from Yossi and Odelia and 
+it worked on all of them.
+
+I left all the Tilda-s that Yuval and Yossi introduced so you should not experience 
+problems with that.
+
+Please try it carefully before using regularly
+Moshe
