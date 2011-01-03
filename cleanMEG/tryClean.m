@@ -1,4 +1,4 @@
-function [doLineF, doXclean, doHB] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB)
+function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur)
 % Try to clean a piece of MEG to see if all can work
 %   [doLineF, doXclean, doHB] = tryClean(MEG, samplingRate, Trig, XTR, ...
 %                               doLineF, doXclean, doHB);
@@ -7,11 +7,18 @@ function [doLineF, doXclean, doHB] = tryClean(MEG, samplingRate, Trig, XTR, doLi
 % samplingRate - in samples per s.
 % Trig         - the trig channel
 % XTR          - the external channels
+% stepDur      - how long at top of a step the smoothing does apply
+%                [default 0.2], but it depends on HiPass of MEG
+%     The variable sbelow ar eboth input and output variables:
 % doLineF, doXclean, doHB - flags (true/false) saying which cleaning method
-%                you wish to apply to the Data
-%
+%                you wish to apply or which are possible to apply
+% 
+% figH         - the fig handle for the plot of mean HB
+% QRS          - the shape of the mean filtered QRS
+
 % doLineF, doXclean, doHB - returned true if the requested cleaning can be
 %                done
+% chans2ignore  - list of channels with problems
 % NOTE
 %      at the beginning of this procedure there are a list of default
 %      parameters which you mey need to change according to the machine
@@ -42,6 +49,8 @@ xChannels = 4:6;        % channels on which acceleration is recorded
 HBperiod = 0.8;           % expected heart beat period in s.
 
 % define missing params
+if ~exist('chans2ignore', 'var'), chans2ignore = []; end
+% if isempty (chans2ignore), chans2ignore = []; end
 if ~exist('doLineF', 'var'), doLineF = []; end
 if isempty (doLineF), doLineF = false; end
 if ~exist('doXclean', 'var'), doXclean = []; end
@@ -52,9 +61,35 @@ if ~exist('Trig', 'var'), Trig = []; end
 if isempty (Trig), doLineF = false; end
 if ~exist('XTR', 'var'), XTR = []; end
 if isempty (XTR), doXclean = false; end
+if ~exist('stepDur', 'var'), stepDur = []; end
+if isempty (stepDur), stepDur = 1/5; end
 
 numMEGchans = size(MEG,1);
 chans2analyze = 1:numMEGchans;
+chans2analyze(chans2ignore)=[];
+
+%% remove big steps if any
+bigStep=false(1,numMEGchans);
+whereBig = nan(1,numMEGchans);
+for iii=chans2analyze
+    x = MEG(iii,:);
+    [where, Tilda, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
+    if ~isempty(where) && ~atEnd
+        bigStep(iii)=true;
+        whereBig(iii) = where;
+    end
+end
+numBigSteps = sum(bigStep);
+if numBigSteps>3 % clean the steps
+    chans2clean = find(bigStep);
+    for iii=chans2clean
+        x = MEG(iii,:);
+        where = whereBig(iii);
+        MEG(iii,:) = removeStep(x, where, samplingRate);
+    end
+elseif numBigSteps>0 % marks this channels to be excluded
+    chans2ignore = unique([chans2ignore find(bigStep)]);
+end
 
 %% check if any channel is too big or too noisy
 ignoreChans = false(1, numMEGchans);
@@ -81,13 +116,14 @@ if mVv > outLierMargin
     end
 end
 % sometimes the last value is HUGE??
-[Tilda,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
+[junkChan,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
 if ~isempty(junkData)
     endI = startI + size(MEG,2)-1;
     warning('MATLAB:MEGanalysis:nonValidData', ...
         ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-        num2str(endI/samplingRate) ' - truncated'])
-    MEG(:,junkData:end)=0;
+        num2str(junkData(1)/samplingRate) ' - truncated'])
+    MEG(junkChan,junkData:end)=0;
+    ignoreChans(junkChan)=true;
 end
 
 chans2analyze(chans2ignore)= [];
@@ -159,13 +195,14 @@ if doLineF
         end
     end
     % sometimes the last value is HUGE??
-    [Tilda,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
+    [junkChan,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
     if ~isempty(junkData)
         endI = startI + size(MEG,2)-1;
         warning('MATLAB:MEGanalysis:nonValidData', ...
             ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-            num2str(endI/samplingRate) ' - truncated'])
-        MEG(:,junkData:end)=0;
+            num2str(junkData/samplingRate) ' - truncated'])
+        MEG(junkChan,junkData:end)=0;
+        ignoreChans(junkChan)=true;
     end
     
     %% find the the position and mean of LF cycle
@@ -250,7 +287,9 @@ if doLineF
             XTR(nc,:)=y;
         end
         % check that there is a signal on xChannels
-        if any(var(XTR(xChannels,:),[],2)<minVarAcc)
+        if size(XTR,1)<max(xChannels)  % requested XTR does not exist
+            doXclean = false;
+        elseif any(var(XTR(xChannels,:),[],2)<minVarAcc)
             doXclean=false;
         end
     end
@@ -269,8 +308,9 @@ end
 %% clean the Heart Beat
 if doHB
     mMEG = mean(MEG,1);
-    [whereisHB, zTime, Errors, amplitudes, meanBeat]= findHB01(mMEG, samplingRate,HBperiod,...
+    [whereisHB, zTime, Errors, amplitudes, meanBeat, figH, QRS]= findHB01(mMEG, samplingRate,HBperiod,...
         'PLOT', 'VERIFY');
+    drawnow
     if (sum(Errors.shortHB)>3) || (sum(Errors.longHB)>3) || (Errors.numSmallPeaks>3) % added by Yuval
         warning('MATLAB:MEGanalysis:ImproperData',...
             'Heart beat signal not clear enough No HB cleaning done');

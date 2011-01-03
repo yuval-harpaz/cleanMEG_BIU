@@ -1,4 +1,4 @@
-function [wherisHB, zTime, Errors, amplitudes, meanBeat] = findHB01(mMEG, samplingRate, HBperiod, toPlot, toVerify)
+function [wherisHB, zTime, Errors, amplitudes, meanBeat, figH, QRS] = findHB01(mMEG, samplingRate, HBperiod, toPlot, toVerify)
 % find heart beats in mean MEG channel
 % [wherisHB, zTime, Errors, amplitudes, meanBeat] = findHB01(mMEG, samplingRate, HBperiod, toPlot, toVerify);
 %
@@ -16,6 +16,8 @@ function [wherisHB, zTime, Errors, amplitudes, meanBeat] = findHB01(mMEG, sampli
 % meanBeat - shape of the mean beat
 % amplitudes - list of size of QRS complexes
 % zTime    - where in the cycle is time zero
+% figH     - handle to the figure with the heart beats
+% QRS      - the shape of the mean QRS
 
 % NOV 2008  MA
 % UPDATES
@@ -27,7 +29,9 @@ function [wherisHB, zTime, Errors, amplitudes, meanBeat] = findHB01(mMEG, sampli
 %             then the mean cycle is computed on the unaltered data. 
 %             test for inverted QRS. 
 %             If the bigest peaks are negative the entire signal is
-%             inverted.  MA
+%             inverted. Fig handle and QRS shape are returned for later use
+%             MA
+% Jan 2011 - Bug in finding center of gravity for QRS - fixed.  MA
 
 %% initialize
 % internal parameters to be put as varargin in later stage
@@ -123,7 +127,7 @@ end
 
 QRSindx = Ipeaks;
 if dbgPlot
-    figure
+    figH = figure;
     plot(sMEG*nFactor);
     hold on
     yr = max(sMEG*nFactor);
@@ -213,6 +217,6 @@ mQRS = meanBeat(zNeighbor);
 lHB = find(mQRS>=mQRS(zBefore)/2,1) +zTime-zBefore; % half height to the left
 rHB = find(mQRS>=mQRS(zBefore)/2,1,'last') +zTime-zBefore; % half height to the right
 % tests show that the peak coordination is with -1
-zTime = round(sum(meanBeat(lHB:rHB).*(lHB:rHB))/sum(meanBeat(lHB:rHB)))-1;
+zTime = round(sum(abs(meanBeat(lHB:rHB)).*(lHB:rHB))/sum(abs(meanBeat(lHB:rHB))))-1;
 
 return
