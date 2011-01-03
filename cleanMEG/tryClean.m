@@ -390,6 +390,8 @@ if doHB
 %         y = cleanMean(x, whereisHB, MEGhbCycle(chan,:), zTime, Amplitudes);
 %         MEG(chan,:)=y;
 %     end
+else
+figH='no heart fig';QRS='no qrs';
 end
 
 return

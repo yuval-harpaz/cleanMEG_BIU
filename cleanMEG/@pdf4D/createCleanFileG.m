@@ -582,7 +582,10 @@ end
 if ~noQuestions
     if exist(outFile, 'file')
         R = input(['outFile ' outFile ' already exists. \n Do you wish to replace? [1-yes/0-no] ']);
-        if R~=1
+        if isempty(R)
+            disp('Aborting')
+            return
+        elseif R~=1
             disp('Aborting')
             return
         end
