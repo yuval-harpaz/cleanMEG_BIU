@@ -398,7 +398,7 @@ if doXclean  % truncate the top frequencies
         end
     end
     xBand(ii)=maxF;
-    xBand(ii+1:end)=[];
+    xBand(ii+1:end)=[];  
 end
 if numEpochs>1
     if doHB
@@ -421,7 +421,10 @@ end
 if ~isempty(chix)
     chnx = channel_name(pIn,chix);
     [Tilda, chixSorted] = sortMEGnames(chnx,chix);
+    chixs=channel_name(pIn,chixSorted);
     XTR = read_data_block(pIn,double(samplingRate*[1,testT]),chixSorted);
+    % finding row number of acc channels in XTR
+    xChannels=zeros(1,3);for cnx=1:(size(chixs,2)-2);xi=str2num(chixs{1,cnx}(1,2));if xi==4; xChannels(1,1)=cnx; xChannels(1,2)=cnx+1;xChannels(1,3)=(cnx+2);end;end
 else
     XTR=[];
 end
@@ -435,7 +438,7 @@ end
 trig = read_data_block(pIn,double(samplingRate*[1,testT]),chit);
 MEG = read_data_block(pIn,double(samplingRate*[1,testT]),chiSorted);
 [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR,...
-                            doLineF, doXclean, doHB, chans2ignore, stepDur);
+                            doLineF, doXclean, doHB, chans2ignore, stepDur,xChannels);
 if doLineF 
     if isempty(trig)
         warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')
@@ -804,7 +807,7 @@ if doLineF
     for ii = 1:numPieces
         startI = startApiece(ii);
         endI  = stopApiece(ii);
-        disp(['finding LF for: ' num2str([startI,endI]/samplingRate)])
+        disp(['finding LF for: ' num2str(round([startI,endI]/samplingRate))])
         
         trig = read_data_block(p, [startI,endI], chit);
         whereUp=find(diff(mod(trig,2*lineF-1)>=lineF)==1);
@@ -976,7 +979,7 @@ if doHB||doLineF||doXclean
         startI = startApiece(ii);
         endI  = stopApiece(ii);
         if doLineF
-            disp(['cleaning LF for the piece ' num2str([startI,endI]/samplingRate)])
+            disp(['cleaning LF for the piece ' num2str(round([startI,endI]/samplingRate))])
         end
         transitions(ii) = endI;
         MEG = read_data_block(p, [startI,endI], chiSorted);
@@ -1143,7 +1146,7 @@ if doHB||doLineF||doXclean
         end
         %% clean by the extarnal lines if needed
         if doXclean
-            disp(['cleaning XTR channels for the piece ' num2str([startI,endI]/samplingRate)])
+            disp(['cleaning XTR channels for the piece ' num2str(round([startI,endI]/samplingRate))])
             for nc = chans2analyze
                 x=MEG(nc,:);
                 y = coefsAllByFFT(x, XTR(xChannels,:),...
@@ -1161,7 +1164,7 @@ if doHB||doLineF||doXclean
         %% HB period
         
         if doHB 
-            disp(['Finding heart beat for the piece ' num2str([startI,endI]/samplingRate)])
+            disp(['Finding heart beat for the piece ' num2str(round([startI,endI]/samplingRate))])
             mMEG = mean(MEG(chans2analyze,:),1);
             if  ii==1 % do on first run only
                 [whereisHB, zTime, Errors,amplitudes]= findHB01(mMEG, samplingRate,HBperiod,...
@@ -1310,6 +1313,7 @@ if doHB||doLineF||doXclean
             if maskTrig
                 for bitNo =1:length(trigBits2mask)
                     trig = clearBits(trig, trigBits2mask(bitNo));
+                    oldData(chit,:)=trig;
                 end
             end
             fwrite(fid, oldData, data_format_out);
@@ -1394,11 +1398,11 @@ for ii = 1:numPieces
     startI = startApiece(ii);
     endI  = stopApiece(ii);
     if doHB&&doFFT
-        disp(['cleaning HB and by FFT for the piece ' num2str([startI,endI]/samplingRate)])
+        disp(['cleaning HB and by FFT for the piece ' num2str(round([startI,endI]/samplingRate))])
     elseif doHB &&~doFFT
-        disp(['cleaning HB for the piece ' num2str([startI,endI]/samplingRate)])
+        disp(['cleaning HB for the piece ' num2str(round([startI,endI]/samplingRate))])
     else
-        disp(['cleaning by FFT for the piece ' num2str([startI,endI]/samplingRate)])
+        disp(['cleaning by FFT for the piece ' num2str(round([startI,endI]/samplingRate))])
     end
     transitions(ii) = endI;
 

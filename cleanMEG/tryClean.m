@@ -1,4 +1,4 @@
-function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur)
+function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur, xChannels)
 % Try to clean a piece of MEG to see if all can work
 %   [doLineF, doXclean, doHB] = tryClean(MEG, samplingRate, Trig, XTR, ...
 %                               doLineF, doXclean, doHB);
@@ -20,7 +20,7 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig
 %                done
 % chans2ignore  - list of channels with problems
 % NOTE
-%      at the beginning of this procedure there are a list of default
+%F      at the beginning of this procedure there are a list of default
 %      parameters which you mey need to change according to the machine
 %      from which the data was collected.
 
@@ -45,7 +45,7 @@ if maxF>=140
 else
     xBand = 1:maxF;    % the XTR cleaning bands
 end
-xChannels = 4:6;        % channels on which acceleration is recorded
+
 HBperiod = 0.8;           % expected heart beat period in s.
 
 % define missing params
@@ -63,7 +63,7 @@ if ~exist('XTR', 'var'), XTR = []; end
 if isempty (XTR), doXclean = false; end
 if ~exist('stepDur', 'var'), stepDur = []; end
 if isempty (stepDur), stepDur = 1/5; end
-
+if ~exist('xChannels', 'var'), xChannels = 4:6;end        % channels on which acceleration is recorded end
 numMEGchans = size(MEG,1);
 chans2analyze = 1:numMEGchans;
 chans2analyze(chans2ignore)=[];
@@ -272,7 +272,7 @@ if doLineF
     end
     if exist('XTR','var') && ~isempty(XTR) % clean the 50 Hz
         for nc = 1:size(XTR,1)
-            x=XTR(nc,:);
+            x=XTR(xChannels(nc),:);
             if Global
                 y = cleanMean(x, whereUp, XTRlfCycle(nc,:), 1, []);
             elseif Adaptive
@@ -284,10 +284,10 @@ if doLineF
                 error ('MATLAB:MEGanalysis:IllegalParam'...
                     ,['Allwed METHODs are: ' legalArgs])
             end
-            XTR(nc,:)=y;
+            XTR(xChannels(nc),:)=y;
         end
         % check that there is a signal on xChannels
-        if size(XTR,1)<max(xChannels)  % requested XTR does not exist
+        if size(XTR,1)<3  % requested XTR does not exist
             doXclean = false;
         elseif any(var(XTR(xChannels,:),[],2)<minVarAcc)
             doXclean=false;
