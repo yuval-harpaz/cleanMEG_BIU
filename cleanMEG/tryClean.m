@@ -271,7 +271,7 @@ if doLineF
         MEG(nc,:)=y;
     end
     if exist('XTR','var') && ~isempty(XTR) % clean the 50 Hz
-        for nc = 1:size(XTR,1)
+        for nc = 1:size(xChannels,1)
             x=XTR(xChannels(nc),:);
             if Global
                 y = cleanMean(x, whereUp, XTRlfCycle(nc,:), 1, []);
@@ -282,7 +282,7 @@ if doLineF
 %                 y = cleanLineF(x, whereUp, [], 'phasePrecession');
             else
                 error ('MATLAB:MEGanalysis:IllegalParam'...
-                    ,['Allwed METHODs are: ' legalArgs])
+                    ,['Allowed METHODs are: ' legalArgs])
             end
             XTR(xChannels(nc),:)=y;
         end
