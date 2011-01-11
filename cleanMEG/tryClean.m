@@ -1,4 +1,4 @@
-function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur, xChannels)
+function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur)
 % Try to clean a piece of MEG to see if all can work
 %   [doLineF, doXclean, doHB] = tryClean(MEG, samplingRate, Trig, XTR, ...
 %                               doLineF, doXclean, doHB);
@@ -20,7 +20,7 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig
 %                done
 % chans2ignore  - list of channels with problems
 % NOTE
-%F      at the beginning of this procedure there are a list of default
+%      at the beginning of this procedure there are a list of default
 %      parameters which you mey need to change according to the machine
 %      from which the data was collected.
 
@@ -31,8 +31,16 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig
 lf = 50;                  % expected line frequrncy
 Adaptive = true;          % how to clean the LF
 Global = false;           % how to clean the LF
+%initialize
+figH=[];
+QRS=[];
+
 PhasePrecession = false;  % how to clean the LF
-chans2ignore =  [74,204]; % known bad channels
+if isempty(chans2ignore)
+    warning('MEGanalysis:missing_input',...
+            ['adding channels 74 and 204 as channels to ignore'])
+    chans2ignore =  [74,204]; % known bad channels
+end
 outLierMargin = 10;       % channel with values that exceede 10 std are bad
 hugeVal  = 1e-9;          % impossibly large MEG data
 minVarAcc = 1e-4;         % XTR must have this variance or more
@@ -45,7 +53,7 @@ if maxF>=140
 else
     xBand = 1:maxF;    % the XTR cleaning bands
 end
-
+xChannels = 4:6;        % channels on which acceleration is recorded
 HBperiod = 0.8;           % expected heart beat period in s.
 
 % define missing params
@@ -63,7 +71,7 @@ if ~exist('XTR', 'var'), XTR = []; end
 if isempty (XTR), doXclean = false; end
 if ~exist('stepDur', 'var'), stepDur = []; end
 if isempty (stepDur), stepDur = 1/5; end
-if ~exist('xChannels', 'var'), xChannels = 4:6;end        % channels on which acceleration is recorded end
+
 numMEGchans = size(MEG,1);
 chans2analyze = 1:numMEGchans;
 chans2analyze(chans2ignore)=[];
@@ -73,7 +81,9 @@ bigStep=false(1,numMEGchans);
 whereBig = nan(1,numMEGchans);
 for iii=chans2analyze
     x = MEG(iii,:);
-    [where, Tilda, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
+    %[where, Tilda, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
+    %yossi
+    [where, Tilda, atEnd] = findBigStep(x,samplingRate,outLierMargin, stepDur, []);
     if ~isempty(where) && ~atEnd
         bigStep(iii)=true;
         whereBig(iii) = where;
@@ -126,7 +136,7 @@ if ~isempty(junkData)
     ignoreChans(junkChan)=true;
 end
 
-chans2analyze(chans2ignore)= [];
+%chans2analyze(chans2ignore)= [];
 MEG(chans2ignore,:)=0;
 
 %% find the LF bit in Trig.  Try 1st the 256 bit
@@ -258,9 +268,9 @@ if doLineF
     for nc = chans2analyze
         x=MEG(nc,:);
         if Global
-            [y,Tilda] = cleanMean(x, whereUp, MEGlfCycle(nc,:), 1, []);
+            [y,tilda] = cleanMean(x, whereUp, MEGlfCycle(nc,:), 1, []);
         elseif Adaptive
-            [y, Tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
+            [y, tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
             % define the array of means
 %         elseif phasePrecession % must be phase precession
 %             y = cleanLineF(x, whereUp, [], 'phasePrecession');
@@ -271,23 +281,23 @@ if doLineF
         MEG(nc,:)=y;
     end
     if exist('XTR','var') && ~isempty(XTR) % clean the 50 Hz
-        for nc = 1:size(xChannels,1)
-            x=XTR(xChannels(nc),:);
+        for nc = 1:size(XTR,1)
+            x=XTR(nc,:);
             if Global
                 y = cleanMean(x, whereUp, XTRlfCycle(nc,:), 1, []);
             elseif Adaptive
-                [y, Tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
+                [y, tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
                 % define the array of means
 %             elseif phasePrecession % must be phase precession
 %                 y = cleanLineF(x, whereUp, [], 'phasePrecession');
             else
                 error ('MATLAB:MEGanalysis:IllegalParam'...
-                    ,['Allowed METHODs are: ' legalArgs])
+                    ,['Allwed METHODs are: ' legalArgs])
             end
-            XTR(xChannels(nc),:)=y;
+            XTR(nc,:)=y;
         end
         % check that there is a signal on xChannels
-        if size(XTR,1)<3  % requested XTR does not exist
+        if size(XTR,1)<max(xChannels)  % requested XTR does not exist
             doXclean = false;
         elseif any(var(XTR(xChannels,:),[],2)<minVarAcc)
             doXclean=false;
@@ -311,13 +321,17 @@ if doHB
     [whereisHB, zTime, Errors, amplitudes, meanBeat, figH, QRS]= findHB01(mMEG, samplingRate,HBperiod,...
         'PLOT', 'VERIFY');
     drawnow
-    if (sum(Errors.shortHB)>3) || (sum(Errors.longHB)>3) || (Errors.numSmallPeaks>3) % added by Yuval
+
+    totalIrregularHB = length(Errors.shortHB)+length(Errors.longHB)+ length(Errors.smallHB)+length(Errors.bigHB);
+    maxIrregularHBallowed = ceil(length(amplitudes)*0.05);
+    %TODO: not sure if should add also Errors.numSmallPeaks??
+    if  totalIrregularHB > maxIrregularHBallowed
         warning('MATLAB:MEGanalysis:ImproperData',...
-            'Heart beat signal not clear enough No HB cleaning done');
+            ['Heart beat signal not clear enough No HB cleaning done found: ', num2str(totalIrregularHB), ' irregular HB']);
         disp(Errors)
         doHB = false;
         return
-    end % end of added by Yuval
+    end
     % code from here on are pieces used to actually clean the HB - but it
     % was not debugged, and is not needed for the purpose of the tryClean
     % procedure
@@ -390,8 +404,6 @@ if doHB
 %         y = cleanMean(x, whereisHB, MEGhbCycle(chan,:), zTime, Amplitudes);
 %         MEG(chan,:)=y;
 %     end
-else
-figH='no heart fig';QRS='no qrs';
 end
 
 return
