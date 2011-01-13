@@ -1,4 +1,4 @@
-function cleanCoefs = createCleanFileG(Tilda, inFile, varargin)
+function cleanCoefs = createCleanFile(Tilda, inFile, varargin)
 % Create a new pdf file from an old one
 % cleanCoefs = createCleanFileE(pdf, inFile, , varargin);
 %    e.g.
@@ -131,6 +131,7 @@ if ispc % adjust this according to the max memory in the system
 else
     samplesPerPiece = 500000;
 end
+irregularHBallowed = 0.05; % maximum 5% missing HB in the tested period is OK
 
 warning('ON', 'MEGanalysis:missingInput:settingBands')
 warning('ON','MATLAB:MEGanalysis:NotUsed')
@@ -284,6 +285,7 @@ end
 if doXclean && isempty(xBand) % define the xBands
      xBand = [1:139,140:20:800]';
 end
+
 QRSstartT = -0.042;  % duration of QRS around peak in HB artifact
 QRSendT   =  0.040;
 clipAmplitude = true; % do not let relative amplitudes go beyond limits
@@ -349,6 +351,10 @@ if ~isempty(whichArg)
             phasePrecession = true;
     end  % end of switch
 end
+if ~exist('xChannels', 'var')
+    xChannels=[];
+end
+
 if ~exist('noQuestions', 'var')
     noQuestions = 0;
 end
@@ -553,6 +559,8 @@ end
 cleanInfo = struct('fileName',inFile , 'samplingRate',samplingRate ,...
     'allCoefs',[] , 'eigVec',[] , 'bands',[], 'xClean',doXclean ,...
     'xBand',xBand);
+cleanCoefs(1) = cleanInfo; %initialize cleanCoefs with some value in case the function returns before giving it a value (causing wrong error message)
+
 % prepare the list of indices for heart beat
 if doHB
     HBparams = struct('whereisHB',[] , 'Errors',[] , 'zTime',[] , 'mMEGhb',[] ...
@@ -1143,9 +1151,11 @@ if doHB||doLineF||doXclean
                 end
             end
         end
-        if useTrig2 || ~isempty(linePeriod2)
-            warning('MATLAB:MEGanalysis:NotUsed','Second LF trig is not used for now.')
-            warning('OFF','MATLAB:MEGanalysis:NotUsed');  % do not repeat this warning
+        if doLineF
+            if useTrig2 || ~isempty(linePeriod2)
+                warning('MATLAB:MEGanalysis:NotUsed','Second LF trig is not used for now.')
+                warning('OFF','MATLAB:MEGanalysis:NotUsed');  % do not repeat this warning
+            end
         end
         %% clean by the extarnal lines if needed
         if doXclean
@@ -1174,9 +1184,8 @@ if doHB||doLineF||doXclean
                     'NoPLOT', 'VERIFY');
                 %Yossi: the amount of irregularHB allowed is 5% of number
                 %of existing HB
-                %if (length(Errors.shortHB)>maxIrregularHBallowed) || (length(Errors.longHB)>maxIrregularHBallowed) || (Errors.numSmallPeaks>maxIrregularHBallowed) % added by Yuval
                 totalIrregularHB = length(Errors.shortHB)+length(Errors.longHB)+ length(Errors.smallHB)+length(Errors.bigHB);
-                maxIrregularHBallowed = ceil(length(amplitudes)*0.05);
+                maxIrregularHBallowed = ceil(length(amplitudes)*irregularHBallowed);
                 %TODO: not sure if should add also Errors.numSmallPeaks??
                 if  totalIrregularHB > maxIrregularHBallowed
                     warning('MATLAB:MEGanalysis:ImproperData',...
