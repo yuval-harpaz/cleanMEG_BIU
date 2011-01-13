@@ -1,4 +1,4 @@
-function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur)
+function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur, xChannels)
 % Try to clean a piece of MEG to see if all can work
 %   [doLineF, doXclean, doHB] = tryClean(MEG, samplingRate, Trig, XTR, ...
 %                               doLineF, doXclean, doHB);
@@ -53,7 +53,7 @@ if maxF>=140
 else
     xBand = 1:maxF;    % the XTR cleaning bands
 end
-xChannels = 4:6;        % channels on which acceleration is recorded
+if ~exist('xChannels', 'var'), xChannels = 4:6;end        % channels on which acceleration is recorded end
 HBperiod = 0.8;           % expected heart beat period in s.
 
 % define missing params
@@ -294,10 +294,10 @@ if doLineF
                 error ('MATLAB:MEGanalysis:IllegalParam'...
                     ,['Allwed METHODs are: ' legalArgs])
             end
-            XTR(nc,:)=y;
+            XTR(xChannels(nc),:)=y;
         end
         % check that there is a signal on xChannels
-        if size(XTR,1)<max(xChannels)  % requested XTR does not exist
+        if size(XTR,1)<3  % requested XTR does not exist
             doXclean = false;
         elseif any(var(XTR(xChannels,:),[],2)<minVarAcc)
             doXclean=false;
@@ -332,79 +332,6 @@ if doHB
         doHB = false;
         return
     end
-    % code from here on are pieces used to actually clean the HB - but it
-    % was not debugged, and is not needed for the purpose of the tryClean
-    % procedure
-%     HBcycleLength = round(HBperiod*samplingRate);
-%     % from here on zTime, iBefore and iAfter are FIXED!
-%     iBefore = zTime;
-%     iAfter = HBcycleLength -iBefore-1; 
-%     amplitudes = amplitudes/mean(amplitudes);
-%     if sum(amplitudes<=0)  > 0
-%         doHB= false;
-%         return
-%     end
-%     mMEGhb = zeros(numMEGchans,HBcycleLength);
-%     for chan = 1:numMEGchans
-%         x=MEG(chan,:);
-%         mMEGhb(chan,:) = meanAround(x, whereisHB,iBefore, iAfter);
-%     end
-%     cycleLength = iBefore+iAfter+1;
-%     % offset so edges are near zero
-%     for jj = 1:size(mMEGhb,1)
-%         tailOffset = mean([mMEGhb(jj,1:10) mMEGhb(jj,end-9:end)]);
-%         mMEGhb(jj,:) = mMEGhb(jj,:) - tailOffset;
-%     end
-%     numChans = size(mMEGhb,1);
-%     numBeats = length(whereisHB);
-%     % cycleLength = size(mMEGhb,2);
-%     % Use only the large QRS shape to normalize amplitude.
-%     nTmplt = MEGhbCycle(:, QRSstartI:QRSendI);
-%     nTmplt = nTmplt-repmat(mean(nTmplt,2),1,size(nTmplt,2));
-%     for jj=1:numChans
-%         x= nTmplt(jj,:);
-%         nTmplt(jj,:) = x/sqrt(x*x');
-%     end
-%     nTmplt = nTmplt'; % each normalized template in one column
-%     
-%     % test if first/lst not too close to th edge
-%     if whereisHB(1)-QRSbefore <=0
-%         jStrt=2;
-%     else
-%         jStrt=1;
-%     end
-%     if whereisHB(end)+QRSafter >size(MEG,2)
-%         jEnd=numBeats-1;
-%     else
-%         jEnd=numBeats;
-%     end
-%     
-%     for chan = 1:numChans
-%         Amplitudes = zeros(size(whereisHB));
-%         x=MEG(chan,:);
-%         for jj = jStrt:jEnd  %BUT take care of first and last cycles!!
-%             % what if too near the begining? =XXX
-%             thisBeat = x((whereisHB(jj)-QRSbefore):(whereisHB(jj)+QRSafter));
-%             thisBeat = thisBeat-mean(thisBeat);
-%             Amplitudes(jj) = thisBeat*nTmplt(:,chan);
-%         end
-%         Amplitudes(jStrt:jEnd) = Amplitudes(jStrt:jEnd)/mean(Amplitudes(jStrt:jEnd));
-%         if jStrt>1
-%             Amplitudes(1)=1;
-%         end
-%         if jEnd>numBeats
-%             Amplitudes(end)=1;
-%         end
-%         % clip amplitudes
-%         if clipAmplitude
-%             Amplitudes(Amplitudes<minAmplitude) = minAmplitude;
-%             Amplitudes(Amplitudes>maxAmplitude) = maxAmplitude;
-%         end
-%         allAmplMEG(chan,1:length(Amplitudes)) = Amplitudes;
-%         y = cleanMean(x, whereisHB, MEGhbCycle(chan,:), zTime, Amplitudes);
-%         MEG(chan,:)=y;
-%     end
 end
-
 return
 

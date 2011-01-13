@@ -359,7 +359,7 @@ if ~exist('noQuestions', 'var')
     noQuestions = 0;
 end
 if ~exist('testT', 'var')
-    testT = 30;
+    testT = 90;
 end
 
 % determine the hi-pass filter
