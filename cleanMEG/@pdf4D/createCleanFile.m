@@ -475,7 +475,7 @@ end
 
 %% continue preparations
 if doLineF
-    whereUp=find(diff(mod(trig,2*lineF(1)-1)>=lineF(1))==1);
+    whereUp=find(diff(bitand(uint16(trig),uint16(lineF(1)))));
     if isempty(whereUp)
         doLineF=false;
         warning ('MEGanalysis:missingParam','Couldnot clean the line artefacts')
@@ -484,7 +484,7 @@ if doLineF
         linePeriod = round(mean(diff(whereUp)));
     end
     if length(lineF)>1  % two trig bits are supplied
-        whereUp2=find(diff(mod(trig,2*lineF(2)-1)>=lineF(2))==1);
+        whereUp2=find(diff(bitand(uint16(trig),uint16(lineF(2)))));
         if isempty(whereUp2)
             warning ('MEGanalysis:missingParam',...
                 '2nd bit for LF is not flipping -- ignored')
@@ -597,6 +597,9 @@ if isempty(outFile)
        Name = [outFpreFix, ',' Name];
     end
     outFile = [Path filesep Name];
+    if isempty(Path)
+        outFile = Name;
+    end
 end
 if ~noQuestions
     if exist(outFile, 'file')
@@ -821,7 +824,7 @@ if doLineF
         disp(['finding LF for: ' num2str([startI,endI]/samplingRate)])
         
         trig = read_data_block(p, [startI,endI], chit);
-        whereUp=find(diff(mod(trig,2*lineF-1)>=lineF)==1);
+        whereUp=find(diff(bitand(uint16(trig),uint16(lineF(1)))));
         
         % read all types of data
         MEG = read_data_block(p, [startI,endI], chiSorted);
