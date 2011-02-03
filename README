@@ -1,4 +1,4 @@
-cleanMEG
+cleanMEG   see also at http://yuval-harpaz.github.com/cleanMEG_BIU/
 Professor Abeles' method for cleaning MEG data at Bar Ilan University, Israel.
 cleans the data of 50Hz + harmonics based on line power recording.
 cleans the data of building vibrations based on accelerometers recording.
