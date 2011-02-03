@@ -375,7 +375,7 @@ pIn=pdf4D(inFile);
 %% get basic info on the file
 hdr = get(pIn,'header');
 samplingRate   = double(get(pIn,'dr'));
-stepTail = samplingRate*1.5/hiPass;
+stepTail = round(samplingRate*1.5/hiPass);
 numEpochs = length(hdr.epoch_data);
 % lastSample = double(hdr.epoch_data{1}.pts_in_epoch);
 if numEpochs>1
@@ -752,6 +752,17 @@ for ii = 1:numPieces
     end
     cleanCoefs(ii).bigStep = tBigStep;
     cleanCoefs(ii).whereBig = whereBig;
+    %  look for huge values and add this channel to the bad ones
+    [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
+    %%%%% BUT do not consider chans2ignore
+    if ~isempty(junkData)
+        chanNo = chans2analyze(chan);
+        ignoreChans(chanNo) = true;
+        warning('MATLAB:MEGanalysis:nonValidData', ...
+            ['MEGanalysis:overflow','Some MEG values are huge at: ',...
+            num2str((startI+junkData)/samplingRate), ' ignoring channel ' num2str(chanNo)]);
+        chans2analyze(chan)=[]; % exclude it
+    end
 end
 
 %% decide on size of time slice to process
@@ -854,20 +865,16 @@ if doLineF
                 end
             end
         end
-        % sometimes the last value is HUGE??
-        [Tilda,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
-                %%%%% BUT do not consider chans2ignore
-        if ~isempty(junkData)
-            endI = startI + size(MEG,2)-1;
-            warning('MATLAB:MEGanalysis:nonValidData', ...
-                ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-                num2str(endI/samplingRate)]); % ' - truncated'])
-%             MEG(:,junkData:end)=0;
-            % timeList(end) = junkData-1;
-            % else
-            % timeList(end) = size(MEG,2);
-        end
-        
+        [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
+    %%%%% BUT do not consider chans2ignore
+    if ~isempty(junkData)
+        chanNo = chans2analyze(chan);
+        ignoreChans(chanNo) = true;
+        warning('MATLAB:MEGanalysis:nonValidData', ...
+            ['MEGanalysis:overflow','Some MEG values are huge at: ',...
+            num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
+        chans2analyze(chan)=[]; % exclude it
+    end        
         if exist('chieSorted','var')
             EEG = read_data_block(p, [startI,endI], chieSorted);
         end
@@ -997,16 +1004,16 @@ if doHB||doLineF||doXclean
         end
         transitions(ii) = endI;
         MEG = read_data_block(p, [startI,endI], chiSorted);
-        % sometimes the last value is HUGE??
-        [Tilda,junkData] = find(MEG>hugeVal,1);
-        %%%%% BUT do not consider chans2ignore
-        if ~isempty(junkData)
-            endI = startI + size(MEG,2)-1;
-            warning('MATLAB:MEGanalysis:nonValidData', ...
-                ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-                num2str(endI/samplingRate)]);  % ' - truncated'])
-%             MEG(:,junkData:end)=0;
-        end
+[chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
+    %%%%% BUT do not consider chans2ignore
+    if ~isempty(junkData)
+        chanNo = chans2analyze(chan);
+        ignoreChans(chanNo) = true;
+        warning('MATLAB:MEGanalysis:nonValidData', ...
+            ['MEGanalysis:overflow','Some MEG values are huge at: ',...
+            num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
+        chans2analyze(chan)=[]; % exclude it
+    end      
         
         if exist('chieSorted','var')
             EEG = read_data_block(p, [startI,endI], chieSorted);
@@ -1429,16 +1436,17 @@ for ii = 1:numPieces
     % read all types of data
     MEG = read_data_block(p, [startI,endI], chiSorted);
     % sometimes the last value is HUGE??
-    [Tilda,junkData] = find(MEG>hugeVal,1);
-         %%%%% BUT do not consider chans2ignore
-   if ~isempty(junkData)
-        endI = startI + size(MEG,2)-1;
+    [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
+    %%%%% BUT do not consider chans2ignore
+    if ~isempty(junkData)
+        chanNo = chans2analyze(chan);
+        ignoreChans(chanNo) = true;
         warning('MATLAB:MEGanalysis:nonValidData', ...
             ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-            num2str(endI/samplingRate)]); % ' - truncated'])
-%         MEG(:,junkData:end)=0;
+            num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
+        chans2analyze(chan)=[]; % exclude it
     end
-    
+   
     if ~exist('chirf','var')
         chirf = channel_index(p,'ref');
     end
