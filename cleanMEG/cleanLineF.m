@@ -23,14 +23,15 @@ function [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, mean0)
 
 %  Sep-2008  MA
 % UPDATES
-%   dec-2008  cycle end is considered by meanL and not maxL  MA
+%  Dec-2008  cycle end is considered by meanL and not maxL  MA
 %             Adapted for data composed of non-contiguos pieces
 %  Oct-2010  3 methods of cleaning added
+%  Feb-2011  Bugs in adaptive methods fixed
 
 %% initialize
 if nargin>3
     okArgs = {'GLOBAL','ADAPTIVE','PHASEPRECESSION'};
-    k = strmatch(upper(method), okArgs);
+    k = find(strncmpi(method, okArgs,6));
     if isempty(k)
         error('MATLAB:MEGanalysis:BadParameter',...
             'Unknown method name:  %s.',method);
@@ -58,7 +59,12 @@ else
     Adaptive = false;
     phasePrecession = false;
 end
-maxL = max(diff(whereUp));
+if ~exist('mean0', 'var'), mean0=[]; end
+if ~isempty(mean0)
+    maxL = length(mean0)-1;
+else
+    maxL = max(diff(whereUp));
+end
 if ~exist('epochs', 'var'), epochs = []; end
 if isempty(epochs), epochs = [0, length(dataA)]; end
 if length(epochs)>2
@@ -247,7 +253,11 @@ elseif Adaptive
     Q = 1-1/startNum;
     sum1 = zeros(1,maxL+1);
     ml1 = nan(numCycles,maxL +1);
-    if ~exist('mean0', 'var'), mean0 = []; end
+    if ~exist('mean0', 'var')
+        mean0 = [];
+    else
+        if sum(abs(mean0))==0, mean0=[]; end
+    end
     %% compute a simple average
     if isempty(mean0)  % compute for the firt 256
         for cycle = 1:startNum
@@ -257,16 +267,16 @@ elseif Adaptive
         ml1(1:startNum,:) = repmat(sum1/startNum,startNum,1);
     else % mean0 was provided
         % check that OK
-        r = size(mean0);
+        r = size(mean0,1);
         if r==1 % a row vector - transpose
             mean0 = mean0';
-            r = size(mean0);
+            r = size(mean0,1);
         end
         if r~= length(sum1)
             error('MATLAB:MEGanalysis:ImproperParam',...
                 'The initial mean must be %d long', length(sum1))
         end
-        ml1(1:startNum,:) = repmat(mean0,startNum,1);
+        ml1(1:startNum,:) = repmat(mean0',startNum,1);
     end  % end of getting the first startNum averages
     % continue in adaptive way
     for cycle = startNum+1:numCycles
@@ -274,8 +284,8 @@ elseif Adaptive
         if startCycle+maxL <= size(dataA,2)
             ml1(cycle,:) = Q*ml1(cycle-1,:) + ...
                 dataA(startCycle:startCycle+maxL)/startNum;
-        else % extra cycles reduce ml1
-            ml1(cycle,:)=[];
+        else % extra cycles copy the previous one
+            ml1(cycle,:)=ml1(cycle-1,:);  % copy the last one
         end
     end
     for ii=1:length(whereUp)-1

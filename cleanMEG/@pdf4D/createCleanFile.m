@@ -674,6 +674,12 @@ if ~epoched
         else
             error ('wrong division of data')
         end
+        delta = lastSample-startApiece(end); % length of last piece
+        if delta < floor(samplesPerPiece/4)  % re adjust
+            startApiece(end)=[];
+            stopApiece(end)=[];
+            stopApiece(end)=lastSample;
+        end
     else
         numSamples = round((tEnd-tStrt)*samplingRate);
         numPieces = ceil(numSamples/samplesPerPiece);
@@ -736,9 +742,11 @@ for ii = 1:numPieces
     end
     % whereBigSteps{ii} = whereBig;
     % bigAmplitudes{ii} = bigAmplitudes;
-    if atEnd || sum(~isnan(whereBig))>0  % check if too near the end
+    if atEnd || sum(~isnan(whereBig))>0 % check if too near the end
         lastStep = max(whereBig);
-        if (endI-(lastStep+startI)) < stepTail % move the end
+        if ((endI-(lastStep+startI)) < stepTail)...
+                && ii<numPieces
+            % move the end
             endI = lastStep+stepTail +startI;
             stopApiece(ii)= endI;
             if ii<numPieces % not the last one
@@ -874,39 +882,39 @@ if doLineF
             ['MEGanalysis:overflow','Some MEG values are huge at: ',...
             num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
         chans2analyze(chan)=[]; % exclude it
-    end        
-        if exist('chieSorted','var')
-            EEG = read_data_block(p, [startI,endI], chieSorted);
+    end
+    if exist('chieSorted','var')
+        EEG = read_data_block(p, [startI,endI], chieSorted);
+    end
+    if ~exist('chirf','var')
+        chirf = channel_index(p,'ref');
+    end
+    if ~isempty(chirf)  % read the reference channels
+        % chnrf = channel_name(p,chirf);
+        REF = read_data_block(p, [startI,endI], chirf);
+    end
+    if exist('chixSorted','var')  % read the reference channels
+        XTR = read_data_block(p, [startI,endI], chixSorted);
+    end
+    if ~isempty(cleanCoefs(ii).bigStep) && doStep % remove the step
+        whereBig = cleanCoefs(ii).whereBig;
+        for iii = find(~isnan(whereBig))
+            x = MEG(iii,:);
+            where = whereBig(iii);
+            % if near end - re-read
+            y = removeStep(x, where, samplingRate, [], stepTail);
+            MEG(iii,:)=y;
         end
-        if ~exist('chirf','var')
-            chirf = channel_index(p,'ref');
-        end
-        if ~isempty(chirf)  % read the reference channels
-            % chnrf = channel_name(p,chirf);
-            REF = read_data_block(p, [startI,endI], chirf);
-        end
-        if exist('chixSorted','var')  % read the reference channels
-            XTR = read_data_block(p, [startI,endI], chixSorted);
-        end
-        if ~isempty(cleanCoefs(ii).bigStep) && doStep % remove the step
-            whereBig = cleanCoefs(ii).whereBig;
-            for iii = find(~isnan(whereBig))
-                x = MEG(iii,:);
-                where = whereBig(iii);
-                % if near end - re-read
+        % clean also the REF channels
+        for iii=1:size(REF,1)
+            x = REF(iii,:);
+            where = findBigStep(x,samplingRate, [], stepDur, []);
+            if ~isempty(where)
                 y = removeStep(x, where, samplingRate, [], stepTail);
-                MEG(iii,:)=y;
-            end
-            % clean also the REF channels
-            for iii=1:size(REF,1)
-                x = REF(iii,:);
-                where = findBigStep(x,samplingRate, [], stepDur, []);
-                if ~isempty(where)
-                    y = removeStep(x, where, samplingRate, [], stepTail);
-                    REF(iii,:)=y;
-                end
+                REF(iii,:)=y;
             end
         end
+    end
         % Check if clear by acceleration was required
         if doXclean
             if any(var(XTR(xChannels,:),[],2)<minVarAcc)
@@ -1061,9 +1069,9 @@ if doHB||doLineF||doXclean
                 elseif Adaptive
                     if ii ==1 % first time
                         [y, mean1] = cleanLineF(x, whereUp,...
-                            epochs, 'Adaptive');
+                            epochs, 'Adaptive',zeros(meanL,1));
                         % define the array of means
-                        meanMEG(nc,:) = mean1;
+                        meanMEG(nc,1:length(mean1)) = mean1;
                     else
                         mean1 = meanMEG(nc,:);
                         [y, mean1] = cleanLineF(x, whereUp,...
@@ -1091,7 +1099,7 @@ if doHB||doLineF||doXclean
                 elseif Adaptive
                     if ii ==1 % first time
                         [y, mean1] = cleanLineF(x, whereUp,...
-                            epochs, 'Adaptive');
+                            epochs, 'Adaptive',zeros(meanL,1));
                         % define the array of means
                         meanREF(nc,:) = mean1;
                     else
@@ -1116,7 +1124,7 @@ if doHB||doLineF||doXclean
                     elseif Adaptive
                         if ii ==1 % first time
                             [y, mean1] = cleanLineF(x, whereUp,...
-                                epochs, 'Adaptive');
+                                epochs, 'Adaptive',zeros(meanL,1));
                             % define the array of means
                             meanEEG(nc,:) = mean1;
                         else
@@ -1142,9 +1150,10 @@ if doHB||doLineF||doXclean
                     elseif Adaptive
                         if ii ==1 % first time
                             [y, mean1] = cleanLineF(x, whereUp,...
-                                epochs, 'Adaptive');
-                        % define the array of means
-                        meanXTR(nc,:) = mean1;
+                                epochs, 'Adaptive',zeros(meanL,1));
+                            % define the array of means
+                            meanXTR(nc,:) = mean1;
+                        else
                         else
                             mean1 = meanXTR(nc,:);
                             [y, mean1] = cleanLineF(x, whereUp,...

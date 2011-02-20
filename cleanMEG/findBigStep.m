@@ -51,6 +51,7 @@ while true
     end
     
     whereJump = find(absDdata ==maxDd,1);
+    % whereJump = find(absDdata ==maxDd);
     
     %% decide if a step function
     I0 = whereJump-10;
@@ -63,6 +64,7 @@ while true
     localData = Data(K0:K1);
     maxAmp = max(absData(I0:I1));  
     wherePeak = find(abs(localData)==maxAmp,1)+K0 -1;
+    % wherePeak = find(abs(localData)==maxAmp)+K0 -1;
     peakAmplitude = absData(wherePeak);
     J0 = wherePeak-backPieceSize;
     if J0<1, J0=1; end
@@ -83,4 +85,3 @@ while true
     end
 end
 
-end
