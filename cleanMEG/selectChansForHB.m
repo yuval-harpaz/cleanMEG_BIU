@@ -7,7 +7,11 @@ function selectChans = selectChansForHB(MEG, samplingRate, chans2ignore)
 % chans2ignore - list of channels to be ignored in the analysis
 %
 % selectChans - list of channels that can be used for finding the QRS
-% complex of EKG
+%               complex of EKG
+%
+% NOTE - the program will exclude at least minTooNoisy and at most
+%        maxTooNoisy channels.  The values of these may be varied by
+%        changing the definitions at the beginning of the program.
 
 % Feb-2011  MA
 

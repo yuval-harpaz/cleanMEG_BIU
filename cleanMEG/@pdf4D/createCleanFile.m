@@ -68,9 +68,10 @@ function cleanCoefs = createCleanFile(Tilda, inFile, varargin)
 % 'maskTrigBits' - Which bits in the trogger channel to ignore (e.g. [512,
 %                  1024]),  [] - means do not mask any.  (NOTE that by LF
 %                  will always mask the LF bit.  Default [].
-% 'stepCorrect'  - 1 means attempt to streighten out step artifacts
+% 'stepCorrect'  - 1 means attempt to streighten out step (jump) artifacts
 %                  0 means do not. [default 0]
-% 
+%                  Note! it will only correct 1 step per chunc. when
+%                  multiple steps exist you can rerun repeatedly to correct steps one by one.
 %
 % cleanCoefs  - cell Array with coefsAllByFFT for each section 
 %               (containing section definition, PCs for REF and 
@@ -728,7 +729,6 @@ for ii = 1:numPieces
     whereBig = nan(1,numGoodChans);
     bigAmplitude = nan(1,numGoodChans);
     tBigStep=[];
-    tBig = nan(1,numGoodChans);
     atEnd = false;
     %search for bigSteps
     for iii=chans2analyze
@@ -1153,7 +1153,6 @@ if doHB||doLineF||doXclean
                                 epochs, 'Adaptive',zeros(meanL,1));
                             % define the array of means
                             meanXTR(nc,:) = mean1;
-                        else
                         else
                             mean1 = meanXTR(nc,:);
                             [y, mean1] = cleanLineF(x, whereUp,...
