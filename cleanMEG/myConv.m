@@ -1,4 +1,4 @@
-function [result, varFactor] = myConv(dataA, smoothA, Window, normalize)
+function [result, varFactor] = myConv(dataA, smoothA, Window, normalize, varargin)
 % [result, varFactor] = myConv(data, smooth, Window, normalize);
 % smooth data with a smoothing bin, expand data symetricallty around edges
 % to avoid edge effects, return also a factor for variance reduction.
@@ -7,6 +7,14 @@ function [result, varFactor] = myConv(dataA, smoothA, Window, normalize)
 % smooth    - the bin for smoothing
 % Window    - multiple every piece by Window before convolving
 % normalize - 'NORMALIZE' if to normalize the area under smooth to 1
+% Variable argin
+%   'flip'  - the key word 'flip', followed by logic variable which is:
+%       true  - if data is shorter then smooth - assume it is the bin shape
+%               and the second argument is actually the data.
+%        or
+%       false - consider the first input as data even if it is shorter then
+%               the second.
+%
 % result    - the smoothed data
 % varFactor - how much the data variance is reduced by smoothing
 %
@@ -22,6 +30,7 @@ function [result, varFactor] = myConv(dataA, smoothA, Window, normalize)
 %   extending the data is done only by as much as is needed
 %  Feb-2008  result is the same length as data 
 %  Jan-2010  Window added  MA
+%  Feb-2011  toFlip added
 
 %% initialize input params
 if ~exist('normalize','var'), normalize='normalize'; end
@@ -32,15 +41,37 @@ if isempty(Window)
 else
     toWindow = true;
 end
+if nargin>4
+    name = varargin{1};
+    value = varargin{2};
+    k=strncmpi(name,'flip',3);
+    k = find(k);
+    if isempty(k)       % no match
+        error('MATLAB:statistic:improperParamName', ...
+            'The parameter must be ''FLIP''')
+    elseif length(k)>1  % more then one match (impossible here)
+        error('MATLAB:statistic:improperParamName', ...
+            'umbiguos name: %s',name)
+    else                % 1 match use the data
+        toFlip = value;
+    end
+else
+    toFlip = true;  % default: flip the arguments so that data is longer
+end
 
 %% find which is longer
-if length(dataA)>=length(smoothA)
+if toFlip
+    if length(dataA)>=length(smoothA)
+        data = dataA;
+        smooth = smoothA;
+    else
+        disp('2-nd argument is longer - assuming it is the data');
+        smooth = dataA;
+        data = smoothA;
+    end
+else
     data = dataA;
     smooth = smoothA;
-else
-    disp('2-nd argument is longer - assuming it is the data');
-    smooth = dataA;
-    data = smoothA;
 end
 [a,b] = size(data);
 if a>b
@@ -69,7 +100,13 @@ middleX = floor(length(X)/2)+1;
 ls = length(smooth);
 lsHalf = round(ls/2);
 ld = length(data);
-expandX = [fliplr(X(2:ls+1)),X,fliplr(X(end-ls:end-1))];
+if (ls+1)<=length(X)  % normal expansion
+    expandX = [fliplr(X(2:ls+1)),X,fliplr(X(end-ls:end-1))];
+%     tailLength = ls;
+else                  % repeat X several times
+    expandX = [fliplr(X(2:end)), X, fliplr(X(1:end-1))];
+%     tailLength = length(X)-1;
+end
 
 if ~toWindow
     convolved = conv(expandX, smooth);
