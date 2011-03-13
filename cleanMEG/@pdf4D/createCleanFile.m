@@ -747,7 +747,7 @@ for ii = 1:numPieces
         if ((endI-(lastStep+startI)) < stepTail)...
                 && ii<numPieces
             % move the end
-            endI = lastStep+stepTail +startI;
+            endI = round(lastStep+stepTail +startI);  %% Amit - added round;
             stopApiece(ii)= endI;
             if ii<numPieces % not the last one
                 startApiece(ii+1)=endI;
