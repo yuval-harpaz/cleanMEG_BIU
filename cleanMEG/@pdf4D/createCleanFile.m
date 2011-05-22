@@ -1,4 +1,4 @@
-function cleanCoefs = createCleanFile(Tilda, inFile, varargin)
+function cleanCoefs = createCleanFile(p, inFile, varargin)
 % Create a new pdf file from an old one
 % cleanCoefs = createCleanFileE(pdf, inFile, , varargin);
 %    e.g.
@@ -58,7 +58,7 @@ function cleanCoefs = createCleanFile(Tilda, inFile, varargin)
 %                [1,2,...] list of external channels to use.  [default 0]
 % 'xBands'     - list of frequency bounderies for cleaning
 %                [] means use [1:139,140:20:maxF];
-% chans2ignore' - ignore these channels. The value is
+% 'chans2ignore' - ignore these channels. The value is
 %         the list of channels, (e.g. [74, 204]) which are bad and should
 %         not be treated.
 % 'Memory'     - either 'small' or 'large'. or some number (e.g.100000).
@@ -68,23 +68,19 @@ function cleanCoefs = createCleanFile(Tilda, inFile, varargin)
 % 'maskTrigBits' - Which bits in the trogger channel to ignore (e.g. [512,
 %                  1024]),  [] - means do not mask any.  (NOTE that by LF
 %                  will always mask the LF bit.  Default [].
-% 'stepCorrect'  - 1 means attempt to streighten out step (jump) artifacts
+% 'stepCorrect'  - 1 means attempt to streighten out step artifacts
 %                  0 means do not. [default 0]
-%                  Note! it will only correct 1 step per chunc. when
-%                  multiple steps exist you can rerun repeatedly to correct steps one by one.
+% 'noQuestions' - 1 - the program will NOT ask for user input (will overide
+%                   exisiting clean file)
+%                 0 - the default, user input might be reqiured
+% 'noCleanXTR' - [..] list of external channeks from which LF artifacts are
+%                NOT to be cleaned.
+%                0 clean LF from all XTR - this is the default
 %
 % cleanCoefs  - cell Array with coefsAllByFFT for each section 
 %               (containing section definition, PCs for REF and 
 %               weights for cleaning as well as the the Heart Beat).
 %
-% noQuestions - 1 - the program will NOT ask for user input (will overide
-%                   exisiting clean file)
-%               0 - the default, user input might be reqiured
-% 
-% testT - number, try cleaning test is done on testT seconds of the signal
-%                 the default is 30 seconds
-% 
-% 
 % NOTE this will work properly only if data in the file is continuous.
 %      Due to memory limitations the file is read and written several
 %      times. Each time the processing is in pieces.  First time the times
@@ -112,7 +108,7 @@ function cleanCoefs = createCleanFile(Tilda, inFile, varargin)
 % Dec-2010 try Clean is added to make sure all the cleaning requests can be
 %          used.  The order changed 1st clean by XTR and only then by HB.
 % Dec-2010 maskTrigBits added  MA
-%          MA
+% Apr-2011 'noCleanXTR' added, correct updates for chans2ignore.  MA
 
 %% Initialize
 % setup some default values
@@ -132,7 +128,6 @@ if ispc % adjust this according to the max memory in the system
 else
     samplesPerPiece = 500000;
 end
-irregularHBallowed = 0.05; % maximum 5% missing HB in the tested period is OK
 
 warning('ON', 'MEGanalysis:missingInput:settingBands')
 warning('ON','MATLAB:MEGanalysis:NotUsed')
@@ -151,8 +146,8 @@ if nargin > 2
     end
     okargs = {'outFile', 'byLF', 'byFFT', 'RInclude', 'RiLimit','HeteroCoefs',...
         'DefOverflow', 'CleanPartOnly', 'HeartBeat', 'xClean', 'xBands', ...
-        'Method', 'chans2ignore', 'Memory', 'noQuestions', 'maskTrigBits',...
-        'stepCorrect',  'testT'};
+        'Method', 'chans2ignore', 'Memory', 'noQuestions', 'maskTrigBits'...
+        'stepCorrect', 'noCleanXTR'};
     okargs = lower(okargs);
     for j=1:2:nargin-2
         pname = varargin{j};
@@ -202,11 +197,9 @@ if nargin > 2
                 case 7 % 'DefOverflow'
                     overFlowTh = pval;
                 case 8  % 'CleanPartOnly'
-                    if ~isempty(pval)
-                        tStrt = pval(1);
-                        tEnd  = pval(2);
-                        aPieceOnly=true;
-                    end
+                    tStrt = pval(1);
+                    tEnd  = pval(2);
+                    aPieceOnly=true;
                 case 9 % 'HeartBeat'
                     HBperiod = pval;
                     % doHB=true;
@@ -272,8 +265,13 @@ if nargin > 2
                     else
                         doStep = false;
                     end
-                case 18 % testT
-                    testT = pval;
+                case 18 % 'noCleanXTR'
+                    if pval==0 % clean all XTR
+                        cleanAllXTR = true;
+                    else
+                        cleanAllXTR = false;
+                        XTRtoIgnore = pval;
+                    end
             end  % end of switch
         end  % end of tests for unique arg name
     end  % end of testing for even number of argumants
@@ -286,7 +284,6 @@ end
 if doXclean && isempty(xBand) % define the xBands
      xBand = [1:139,140:20:800]';
 end
-
 QRSstartT = -0.042;  % duration of QRS around peak in HB artifact
 QRSendT   =  0.040;
 clipAmplitude = true; % do not let relative amplitudes go beyond limits
@@ -352,20 +349,15 @@ if ~isempty(whichArg)
             phasePrecession = true;
     end  % end of switch
 end
-if ~exist('xChannels', 'var')
-    xChannels=[];
-end
-
 if ~exist('noQuestions', 'var')
     noQuestions = 0;
 end
-if ~exist('testT', 'var')
-    testT = 90;
-end
+if ~exist('cleanAllXTR', 'var'), cleanAllXTR=[]; end
+if isempty(cleanAllXTR), cleanAllXTR=true; end
 
 % determine the hi-pass filter
 if strcmpi(inFile(end-1:end), 'Hz') % standard file name
-    hiPass = str2num(inFile(end-4:end-2));
+    hiPass = str2double(inFile(end-4:end-2));
     if isempty(hiPass), hiPass=0.01; end % was DC
 else % non standard file name - assume 0.1Hz
     hiPass = 0.1;
@@ -399,7 +391,7 @@ end
 chit = channel_index(pIn,'TRIGGER');
 chi = channel_index(pIn,'meg');
 chn = channel_name(pIn,chi);
-[Tilda, chiSorted] = sortMEGnames(chn,chi);
+[tilda, chiSorted] = sortMEGnames(chn,chi);
 chix = channel_index(pIn,'EXTERNAL');
 chirf = channel_index(pIn,'ref');
 chie = channel_index(pIn,'EEG');
@@ -430,7 +422,7 @@ if numEpochs>1
 end
 
 %% read a piece of the trig signal to find if Line frequency is available
-%testT=30;  % 30 seconds (taken from varargin. changed by Yossi)
+testT=90;  % 30 seconds
 % linePeriod = round(samplingRate/50);  % the default value
 if lastSample/samplingRate<testT
     testT = lastSample/samplingRate;
@@ -438,7 +430,7 @@ end
 % test whether all cleaning are possible
 if ~isempty(chix)
     chnx = channel_name(pIn,chix);
-    [Tilda, chixSorted] = sortMEGnames(chnx,chix);
+    [tilda, chixSorted] = sortMEGnames(chnx,chix);
     XTR = read_data_block(pIn,double(samplingRate*[1,testT]),chixSorted);
 else
     XTR=[];
@@ -476,7 +468,8 @@ end
 
 %% continue preparations
 if doLineF
-    whereUp=find(diff(bitand(uint16(trig),uint16(lineF(1)))));
+%     whereUp=find(diff(mod(trig,2*lineF(1)-1)>=lineF(1))==1);
+      whereUp=find(diff(bitand(uint16(trig),uint16(lineF(1)))));
     if isempty(whereUp)
         doLineF=false;
         warning ('MEGanalysis:missingParam','Couldnot clean the line artefacts')
@@ -485,6 +478,7 @@ if doLineF
         linePeriod = round(mean(diff(whereUp)));
     end
     if length(lineF)>1  % two trig bits are supplied
+%         whereUp2=find(diff(mod(trig,2*lineF(2)-1)>=lineF(2))==1);
         whereUp2=find(diff(bitand(uint16(trig),uint16(lineF(2)))));
         if isempty(whereUp2)
             warning ('MEGanalysis:missingParam',...
@@ -560,8 +554,6 @@ end
 cleanInfo = struct('fileName',inFile , 'samplingRate',samplingRate ,...
     'allCoefs',[] , 'eigVec',[] , 'bands',[], 'xClean',doXclean ,...
     'xBand',xBand);
-cleanCoefs(1) = cleanInfo; %initialize cleanCoefs with some value in case the function returns before giving it a value (causing wrong error message)
-
 % prepare the list of indices for heart beat
 if doHB
     HBparams = struct('whereisHB',[] , 'Errors',[] , 'zTime',[] , 'mMEGhb',[] ...
@@ -598,9 +590,6 @@ if isempty(outFile)
        Name = [outFpreFix, ',' Name];
     end
     outFile = [Path filesep Name];
-    if isempty(Path)
-        outFile = Name;
-    end
 end
 if ~noQuestions
     if exist(outFile, 'file')
@@ -645,12 +634,12 @@ end
 % chi = channel_index(p,'meg');
 % chn = channel_name(p,chi);
 % numMEGchans = length(chi);
-[Tilda, chiSorted] = sortMEGnames(chn,chi);
+[tilda, chiSorted] = sortMEGnames(chn,chi);
 % chir = channel_index(p,'RESPONSE');
 % chie = channel_index(p,'EEG');
 if ~isempty(chie)
     che = channel_name(p,chie);
-    [Tilda, chieSorted] = sortMEGnames(che,chie);
+    [tilda, chieSorted] = sortMEGnames(che,chie);
     numEEGchans = length(che);
 end
 % chirf = channel_index(p,'ref');
@@ -674,12 +663,6 @@ if ~epoched
             stopApiece(end) = lastSample;
         else
             error ('wrong division of data')
-        end
-        delta = lastSample-startApiece(end); % length of last piece
-        if delta < floor(samplesPerPiece/4)  % re adjust
-            startApiece(end)=[];
-            stopApiece(end)=[];
-            stopApiece(end)=lastSample;
         end
     else
         numSamples = round((tEnd-tStrt)*samplingRate);
@@ -742,12 +725,10 @@ for ii = 1:numPieces
     end
     % whereBigSteps{ii} = whereBig;
     % bigAmplitudes{ii} = bigAmplitudes;
-    if atEnd || sum(~isnan(whereBig))>0 % check if too near the end
+    if atEnd || sum(~isnan(whereBig))>0  % check if too near the end
         lastStep = max(whereBig);
-        if ((endI-(lastStep+startI)) < stepTail)...
-                && ii<numPieces
-            % move the end
-            endI = round(lastStep+stepTail +startI);  %% Amit - added round;
+        if (endI-(lastStep+startI)) < stepTail % move the end
+            endI = lastStep+stepTail +startI;
             stopApiece(ii)= endI;
             if ii<numPieces % not the last one
                 startApiece(ii+1)=endI;
@@ -768,9 +749,11 @@ for ii = 1:numPieces
         ignoreChans(chanNo) = true;
         warning('MATLAB:MEGanalysis:nonValidData', ...
             ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-            num2str((startI+junkData)/samplingRate), ' ignoring channel ' num2str(chanNo)]);
+            num2str((startI+junkData)/samplingRate), ' ignoring channel ' num2str(chanNo)]); 
         chans2analyze(chan)=[]; % exclude it
+        chans2ignore = find(ignoreChans);
     end
+    
 end
 
 %% decide on size of time slice to process
@@ -843,8 +826,8 @@ if doLineF
         disp(['finding LF for: ' num2str([startI,endI]/samplingRate)])
         
         trig = read_data_block(p, [startI,endI], chit);
+%         whereUp=find(diff(mod(trig,2*lineF-1)>=lineF)==1);
         whereUp=find(diff(bitand(uint16(trig),uint16(lineF(1)))));
-        
         % read all types of data
         MEG = read_data_block(p, [startI,endI], chiSorted);
         % ignoreChans = false(1,size(MEG,1));
@@ -870,51 +853,58 @@ if doLineF
                         ['In channel #' num2str(iii) ' Variance is too big - ignored'])
                     % MEG(iii,:)=0;
                     ignoreChans(iii)=true;
+                    % delete from chans2analyze
+                    if any(chans2analyze==iii)
+                        chans2analyze(chans2analyze==iii) = [];
+                    end
+                end
+            end
+            chans2ignore = find(ignoreChans);
+        end
+        % sometimes the last value is HUGE??
+        [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
+        %%%%% BUT do not consider chans2ignore
+        if ~isempty(junkData)
+            chanNo = chans2analyze(chan);
+            ignoreChans(chanNo) = true;
+            warning('MATLAB:MEGanalysis:nonValidData', ...
+                ['MEGanalysis:overflow','Some MEG values are huge at: ',...
+                num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
+            chans2analyze(chan)=[]; % exclude it
+        end
+       
+        if exist('chieSorted','var')
+            EEG = read_data_block(p, [startI,endI], chieSorted);
+        end
+        if ~exist('chirf','var')
+            chirf = channel_index(p,'ref');
+        end
+        if ~isempty(chirf)  % read the reference channels
+            % chnrf = channel_name(p,chirf);
+            REF = read_data_block(p, [startI,endI], chirf);
+        end
+        if exist('chixSorted','var')  % read the reference channels
+            XTR = read_data_block(p, [startI,endI], chixSorted);
+        end
+        if ~isempty(cleanCoefs(ii).bigStep) && doStep % remove the step
+            whereBig = cleanCoefs(ii).whereBig;
+            for iii = find(~isnan(whereBig))
+                x = MEG(iii,:);
+                where = whereBig(iii);
+                % if near end - re-read
+                y = removeStep(x, where, samplingRate, [], stepTail);
+                MEG(iii,:)=y;
+            end
+            % clean also the REF channels
+            for iii=1:size(REF,1)
+                x = REF(iii,:);
+                where = findBigStep(x,samplingRate, [], stepDur, []);
+                if ~isempty(where)
+                    y = removeStep(x, where, samplingRate, [], stepTail);
+                    REF(iii,:)=y;
                 end
             end
         end
-        [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
-    %%%%% BUT do not consider chans2ignore
-    if ~isempty(junkData)
-        chanNo = chans2analyze(chan);
-        ignoreChans(chanNo) = true;
-        warning('MATLAB:MEGanalysis:nonValidData', ...
-            ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-            num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
-        chans2analyze(chan)=[]; % exclude it
-    end
-    if exist('chieSorted','var')
-        EEG = read_data_block(p, [startI,endI], chieSorted);
-    end
-    if ~exist('chirf','var')
-        chirf = channel_index(p,'ref');
-    end
-    if ~isempty(chirf)  % read the reference channels
-        % chnrf = channel_name(p,chirf);
-        REF = read_data_block(p, [startI,endI], chirf);
-    end
-    if exist('chixSorted','var')  % read the reference channels
-        XTR = read_data_block(p, [startI,endI], chixSorted);
-    end
-    if ~isempty(cleanCoefs(ii).bigStep) && doStep % remove the step
-        whereBig = cleanCoefs(ii).whereBig;
-        for iii = find(~isnan(whereBig))
-            x = MEG(iii,:);
-            where = whereBig(iii);
-            % if near end - re-read
-            y = removeStep(x, where, samplingRate, [], stepTail);
-            MEG(iii,:)=y;
-        end
-        % clean also the REF channels
-        for iii=1:size(REF,1)
-            x = REF(iii,:);
-            where = findBigStep(x,samplingRate, [], stepDur, []);
-            if ~isempty(where)
-                y = removeStep(x, where, samplingRate, [], stepTail);
-                REF(iii,:)=y;
-            end
-        end
-    end
         % Check if clear by acceleration was required
         if doXclean
             if any(var(XTR(xChannels,:),[],2)<minVarAcc)
@@ -1012,16 +1002,19 @@ if doHB||doLineF||doXclean
         end
         transitions(ii) = endI;
         MEG = read_data_block(p, [startI,endI], chiSorted);
-[chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
-    %%%%% BUT do not consider chans2ignore
-    if ~isempty(junkData)
-        chanNo = chans2analyze(chan);
-        ignoreChans(chanNo) = true;
-        warning('MATLAB:MEGanalysis:nonValidData', ...
-            ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-            num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
-        chans2analyze(chan)=[]; % exclude it
-    end      
+        % sometimes the last value is HUGE??
+        [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
+        %%%%% BUT do not consider chans2ignore
+        if ~isempty(junkData)
+            chanNo = chans2analyze(chan);
+            ignoreChans(chanNo) = true;
+%             endI = startI + size(MEG,2)-1;
+            warning('MATLAB:MEGanalysis:nonValidData', ...
+                ['MEGanalysis:overflow','Some MEG values are huge at: ',...
+                num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
+            chans2analyze(chan)=[]; % exclude it
+%             MEG(:,junkData:end)=0;
+        end
         
         if exist('chieSorted','var')
             EEG = read_data_block(p, [startI,endI], chieSorted);
@@ -1076,7 +1069,7 @@ if doHB||doLineF||doXclean
                         mean1 = meanMEG(nc,:);
                         [y, mean1] = cleanLineF(x, whereUp,...
                             epochs, 'Adaptive', mean1);
-                        meanMEG(nc,:) = mean1;
+                        meanMEG(nc,1:length(mean1)) = mean1;
                     end
                 elseif phasePrecession % must be phase precession
                     y = cleanLineF(x, whereUp, epochs, 'phasePrecession');
@@ -1165,15 +1158,21 @@ if doHB||doLineF||doXclean
                         error ('MATLAB:MEGanalysis:IllegalParam'...
                             ,['Allwed METHODs are: ' legalArgs])
                     end
-                    XTR(nc,:)=y;
+                    if ~cleanAllXTR
+                        if any(nc==XTRtoIgnore) % do not ignore = clean it
+                            XTR(nc,:)=x;  % do not clean
+                        else
+                            XTR(nc,:)=y;  % replace by the cleaned trace
+                        end
+                    else
+                       XTR(nc,:)=y;  % replace by the cleaned trace
+                    end
                 end
             end
         end
-        if doLineF
-            if useTrig2 || ~isempty(linePeriod2)
-                warning('MATLAB:MEGanalysis:NotUsed','Second LF trig is not used for now.')
-                warning('OFF','MATLAB:MEGanalysis:NotUsed');  % do not repeat this warning
-            end
+        if useTrig2 || ~isempty(linePeriod2)
+            warning('MATLAB:MEGanalysis:NotUsed','Second LF trig is not used for now.')
+            warning('OFF','MATLAB:MEGanalysis:NotUsed');  % do not repeat this warning
         end
         %% clean by the extarnal lines if needed
         if doXclean
@@ -1196,20 +1195,17 @@ if doHB||doLineF||doXclean
         
         if doHB 
             disp(['Finding heart beat for the piece ' num2str([startI,endI]/samplingRate)])
-            mMEG = mean(MEG(chans2analyze,:),1);
+            selectChans = selectChansForHB(MEG, samplingRate, chans2ignore);
+%             mMEG = mean(MEG(chans2analyze,:),1);
+            mMEG = mean(MEG(selectChans,:),1);
             if  ii==1 % do on first run only
                 [whereisHB, zTime, Errors,amplitudes]= findHB01(mMEG, samplingRate,HBperiod,...
                     'NoPLOT', 'VERIFY');
-                %Yossi: the amount of irregularHB allowed is 5% of number
-                %of existing HB
-                totalIrregularHB = length(Errors.shortHB)+length(Errors.longHB)+ length(Errors.smallHB)+length(Errors.bigHB);
-                maxIrregularHBallowed = ceil(length(amplitudes)*irregularHBallowed);
-                %TODO: not sure if should add also Errors.numSmallPeaks??
-                if  totalIrregularHB > maxIrregularHBallowed
+                if (length(Errors.shortHB)>3) || (length(Errors.longHB)>3) || (Errors.numSmallPeaks>3) % added by Yuval
                     warning('MATLAB:MEGanalysis:ImproperData',...
-                        ['Heart beat signal not clear enough No HB cleaning done found: ', num2str(totalIrregularHB), ' irregular HB']);
+                        'Heart beat signal not clear enough No HB cleaning done');
                     disp(Errors)
-                end
+                end % end of added by Yuval
                 if findHBperiod  % find the period
                     HBperiod = 0.5*(max(diff(whereisHB))+min(diff(whereisHB)))/samplingRate;
                 end
@@ -1218,7 +1214,9 @@ if doHB||doLineF||doXclean
                 iBefore = zTime;
                 iAfter = HBcycleLength -iBefore-1;
             else
-                [whereisHB, Tilda, Errors, amplitudes] = findHB01(mMEG, samplingRate, HBperiod,'NOPLOT','Verify');
+                selectChans = selectChansForHB(MEG, samplingRate, chans2ignore);
+                mMEG = mean(MEG(selectChans,:),1);
+                [whereisHB, tilda, Errors, amplitudes] = findHB01(mMEG, samplingRate, HBperiod,'NOPLOT','Verify');
             end
             amplitudes = amplitudes/mean(amplitudes);
             if sum(amplitudes<=0)  > 0
@@ -1389,7 +1387,7 @@ if doHB
         if minHere > 1.8*zTime % use it
             % minHBcycle = minHere;
         else
-            whereShort = whereisHB(diff(HB(ii).whereisHB)==minHere)/samplingRate;
+            whereShort = whereisHB(diff(HB(ii).whereisHB)==minHere)'/samplingRate;
             warning('MATLAB:MEGanalysis:inapropriateValue','Shortest cycle too small at %d',...
                 whereShort);
             % add to the errors
@@ -1454,7 +1452,7 @@ for ii = 1:numPieces
             num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
         chans2analyze(chan)=[]; % exclude it
     end
-   
+    
     if ~exist('chirf','var')
         chirf = channel_index(p,'ref');
     end
@@ -1473,8 +1471,9 @@ for ii = 1:numPieces
         % is shifted so the start of susequent pieces overlap
         allAmplMEG = zeros(numMEGchans, maxNoHB);
         allAmplREF = zeros(numREFchans, maxNoHB);
-        mMEG = mean(MEG(chans2analyze,:),1);
-%         mMEGf=myFilt(mMEG, BP4to50Filt);
+        selectChans = selectChansForHB(MEG, samplingRate, chans2ignore);
+%         mMEG = mean(MEG(chans2analyze,:),1);
+        mMEG = mean(MEG(selectChans,:),1);
         whereisHB = findHB01(mMEG, samplingRate,[], 'noPLOT', 'noVERIFY');
         % check for a missing beat at the edges
         if whereisHB(1)>max(diff(whereisHB))  % missed at start
@@ -1768,7 +1767,7 @@ end  % end of treating one piece for HB and FFT
 %% show the cleanned Heart Beat
 if doHB
     MEG = read_data_block(p,double(samplingRate*[1,testT]),chiSorted);
-    mMEG = mean(MEG(~ignoreChans,:),1);
+    mMEG = mean(MEG(selectChans,:),1);
     BandPassSpecObj=fdesign.bandpass('Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
         2,4,50,100,60,1,60,samplingRate);
     BandPassFilt=design(BandPassSpecObj  ,'butter');
