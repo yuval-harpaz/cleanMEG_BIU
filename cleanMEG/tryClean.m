@@ -1,8 +1,9 @@
-function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur)
+function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
+    Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal)
 % Try to clean a piece of MEG to see if all can work
 %    [doLineF, doXclean, doHB, figH, QRS, chans2ignore] = tryClean...
 %           (MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB,...
-%            stepDur);
+%            stepDur, hugeVal);
 % 
 % MEG          - the MEG channels
 % samplingRate - in samples per s.
@@ -13,16 +14,16 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig
 %     The variable sbelow ar eboth input and output variables:
 % doLineF, doXclean, doHB - flags (true/false) saying which cleaning method
 %                you wish to apply or which are possible to apply
-% 
+% hugeVal      - What is considered as overflow
+%
 % figH         - the fig handle for the plot of mean HB
 % QRS          - the shape of the mean filtered QRS
-
 % doLineF, doXclean, doHB - returned true if the requested cleaning can be
 %                done
 % chans2ignore  - list of channels with problems
 % NOTE
 %      at the beginning of this procedure there are a list of default
-%      parameters which you mey need to change according to the machine
+%      parameters which you may need to change according to the machine
 %      from which the data was collected.
 
 % Dec-2010  MA
@@ -32,10 +33,7 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig
 lf = 50;                  % expected line frequrncy
 Adaptive = lf==lf;        % how to clean the LF
 Global = ~Adaptive;       % how to clean the LF
-% PhasePrecession = false;  % how to clean the LF
-% chans2ignore =  [74,204]; % known bad channels
 outLierMargin = 10;       % channel with values that exceede 10 std are bad
-hugeVal  = 1e-9;          % impossibly large MEG data
 minVarAcc = 1e-4;         % XTR must have this variance or more
 maxF = ceil(0.8*samplingRate/2);
 if maxF>=140
@@ -64,6 +62,10 @@ if ~exist('XTR', 'var'), XTR = []; end
 if isempty (XTR), doXclean = false; end
 if ~exist('stepDur', 'var'), stepDur = []; end
 if isempty (stepDur), stepDur = 1/5; end
+if ~exist('hugeVal','var'), hugeVal=[]; end
+if isempty(hugeVal)
+    hugeVal  = 1e-9;      % impossibly large MEG data
+end
 
 figH=[];  % in case not HB is done
 QRS=[];
@@ -78,7 +80,7 @@ bigStep=false(1,numMEGchans);
 whereBig = nan(1,numMEGchans);
 for iii=chans2analyze
     x = MEG(iii,:);
-    [where, tilda, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
+    [where, ~, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
     if ~isempty(where) && ~atEnd
         bigStep(iii)=true;
         whereBig(iii) = where;
@@ -123,7 +125,6 @@ end
 % sometimes the last value is HUGE??
 [junkChan,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
 if ~isempty(junkData)
-%     endI = startI + size(MEG,2)-1;
     warning('MATLAB:MEGanalysis:nonValidData', ...
         ['MEGanalysis:overflow','Some MEG values are huge at: ',...
         num2str(junkData(1)/samplingRate) ' - truncated'])
@@ -136,21 +137,15 @@ MEG(ignoreChans,:)=0;
 
 %% find the LF bit in Trig.  Try 1st the 256 bit
 if doLineF
-    lf1 = samplingRate/lf;
-    bit = uint16(256);
-    trig= uint16(Trig);
-    f=bitand(trig,bit);
-    whereUp = find(diff(f)==bit);
-    meanLF =mean(diff(whereUp));
-    if ~((lf1-2)<meanLF && meanLF<(lf1+2)) %  not within +/- 2 samples
-        whichLF = findLFbit(trig,samplingRate);  % find the LF bit
-        if ~exist('lineF','var'), lineF=[]; end
-        if isempty(lineF)
-            warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')
-            doLineF = false;
-        else
-            whereUp = find(diff(f)==whichLF);
-        end
+    bit = findLFbit(Trig,samplingRate);
+    if ~isempty(bit)
+        trig= uint16(Trig);
+        f=int16(bitand(trig,bit));
+        whichLF = int16(bit);
+        whereUp = find(diff(f)==whichLF);
+    else
+        warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')
+        doLineF = false;
     end
 end
 
@@ -159,48 +154,38 @@ if doLineF
     LFcycleLength = max(diff(whereUp)+3);
     % meanPeriod = mean(whereUp);
     if Global || Adaptive  % use one average for the entire file
-%         MEGlfCycle = zeros(numMEGchans,LFcycleLength);
         if exist('XTR','var')
             XTRlfCycle = zeros(size(XTR,1),LFcycleLength);
         end
-%     elseif PhasePrecession % use interpolation
-%         MEGlfCycle = zeros(numMEGchans,3*LFcycleLength);
-%         if exist('XTR','var')
-%             XTRlfCycle = zeros(length(chixSorted),3*LFcycleLength);
-%         end
-%     else
-%         disp(['The only legal cleaning methods are: ''Global'''...
-%             ', ''Adaptive'', or ''PhasePrecession'''])
     end
-%     totalCycles =0; % cycles of LF
     
     %% check if any channel is too big or too noisy
     ignoreChans = false(1, numMEGchans);
     ignoreChans(chans2ignore) = true;
     chans2analyze = find(~ignoreChans);
-    for iii=chans2analyze % 1:size(MEG,1)
-        if sum(abs(MEG(iii,:))>hugeVal)>100 % there are >100 huge values
-            warning('MEGanalysis:overflow',...
-                ['In channel #' num2str(iii) ' more then 100 oveflows - ignored'])
-            MEG(iii,:)=0;
-            ignoreChans(iii)=true;
-        end
-    end
-    vv = var(MEG,[],2);
-    outVv = (vv-median(vv))/mad(vv);
-    mVv = max(outVv);
-    if mVv > outLierMargin
-        ovIndx = find(outVv>outLierMargin);
-        for jj = 1:length(ovIndx)
-            iii = ovIndx(jj);
-            if ~ignoreChans(iii)  % add to ignored list
-                warning('MEGanalysis:tooBig',...
-                    ['In channel #' num2str(iii) ' Variance is too big - ignored'])
-                % MEG(iii,:)=0;
-                ignoreChans(iii)=true;
-            end
-        end
-    end
+%     for iii=chans2analyze % 1:size(MEG,1)
+%         if sum(abs(MEG(iii,:))>hugeVal)>100 % there are >100 huge values
+%             warning('MEGanalysis:overflow',...
+%                 ['In channel #' num2str(iii) ' more then 100 oveflows - ignored'])
+%             MEG(iii,:)=0;
+%             ignoreChans(iii)=true;
+%         end
+%     end
+%     vv = var(MEG,[],2);
+%     outVv = (vv-median(vv))/mad(vv);
+%     mVv = max(outVv);
+%     if mVv > outLierMargin
+%         ovIndx = find(outVv>outLierMargin);
+%         for jj = 1:length(ovIndx)
+%             iii = ovIndx(jj);
+%             if ~ignoreChans(iii)  % add to ignored list
+%                 warning('MEGanalysis:tooBig',...
+%                     ['In channel #' num2str(iii) ' Variance is too big - ignored'])
+%                 % MEG(iii,:)=0;
+%                 ignoreChans(iii)=true;
+%             end
+%         end
+%     end
     % sometimes the last value is HUGE??
     [junkChan,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
     if ~isempty(junkData)
@@ -230,13 +215,6 @@ if doLineF
         end
         MEGlfCycle = MEGlfCycle+sumC;
         totalCycles = totalCycles+numCyclesHere-1;
-%         sumC = zeros(numREFchans,maxL+1);
-%         for cycle = 1:numCyclesHere-1;
-%             startCycle = whereUp(cycle);
-%             if startCycle+maxL <= size(MEG,2)
-%                 sumC = sumC + REF(:,startCycle:startCycle+maxL);
-%             end
-%         end
         if exist('XTR','var')
             sumC = zeros(size(XTR,1),maxL+1);
             XTRlfCycle = zeros(size(sumC));
@@ -263,9 +241,9 @@ if doLineF
     for nc = chans2analyze
         x=MEG(nc,:);
         if Global
-            [y,tilda] = cleanMean(x, whereUp, MEGlfCycle(nc,:), 1, []);
+            [y,~] = cleanMean(x, whereUp, MEGlfCycle(nc,:), 1, []);
         elseif Adaptive
-            [y, tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
+            [y, ~] = cleanLineF(x, whereUp, [], 'Adaptive');
         end
         MEG(nc,:)=y;
     end
@@ -275,7 +253,7 @@ if doLineF
             if Global
                 y = cleanMean(x, whereUp, XTRlfCycle(nc,:), 1, []);
             elseif Adaptive
-                [y, tilda] = cleanLineF(x, whereUp, [], 'Adaptive');
+                [y, ~] = cleanLineF(x, whereUp, [], 'Adaptive');
             end
             XTR(nc,:)=y;
         end
@@ -301,7 +279,7 @@ end
 %% clean the Heart Beat
 if doHB
     mMEG = mean(MEG(chans2analyze,:),1);
-    [tilda, tilda, Errors, tilda, tilda, figH, QRS]= findHB01(mMEG, samplingRate,HBperiod,...
+    [~, ~, Errors, ~, ~, figH, QRS]= findHB01(mMEG, samplingRate,HBperiod,...
         'PLOT', 'VERIFY');
     drawnow
     if (length(Errors.shortHB)>3) || (length(Errors.longHB)>3) || (Errors.numSmallPeaks>3) % added by Yuval
