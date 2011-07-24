@@ -1,9 +1,9 @@
-function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
+function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur)
     Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal)
 % Try to clean a piece of MEG to see if all can work
 %    [doLineF, doXclean, doHB, figH, QRS, chans2ignore] = tryClean...
 %           (MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB,...
-%            stepDur, hugeVal);
+%            stepDur);
 % 
 % MEG          - the MEG channels
 % samplingRate - in samples per s.
@@ -33,6 +33,8 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
 lf = 50;                  % expected line frequrncy
 Adaptive = lf==lf;        % how to clean the LF
 Global = ~Adaptive;       % how to clean the LF
+% PhasePrecession = false;  % how to clean the LF
+% chans2ignore =  [74,204]; % known bad channels
 outLierMargin = 10;       % channel with values that exceede 10 std are bad
 minVarAcc = 1e-4;         % XTR must have this variance or more
 maxF = ceil(0.8*samplingRate/2);
@@ -62,7 +64,7 @@ if ~exist('XTR', 'var'), XTR = []; end
 if isempty (XTR), doXclean = false; end
 if ~exist('stepDur', 'var'), stepDur = []; end
 if isempty (stepDur), stepDur = 1/5; end
-if ~exist('hugeVal','var'), hugeVal=[]; end
+
 if isempty(hugeVal)
     hugeVal  = 1e-9;      % impossibly large MEG data
 end
@@ -80,7 +82,7 @@ bigStep=false(1,numMEGchans);
 whereBig = nan(1,numMEGchans);
 for iii=chans2analyze
     x = MEG(iii,:);
-    [where, ~, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
+    [where, tilda, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
     if ~isempty(where) && ~atEnd
         bigStep(iii)=true;
         whereBig(iii) = where;
@@ -125,6 +127,7 @@ end
 % sometimes the last value is HUGE??
 [junkChan,junkData] = find(MEG(~ignoreChans,:)>hugeVal,1);
 if ~isempty(junkData)
+%     endI = startI + size(MEG,2)-1;
     warning('MATLAB:MEGanalysis:nonValidData', ...
         ['MEGanalysis:overflow','Some MEG values are huge at: ',...
         num2str(junkData(1)/samplingRate) ' - truncated'])
@@ -144,6 +147,7 @@ if doLineF
         whichLF = int16(bit);
         whereUp = find(diff(f)==whichLF);
     else
+        if ~exist('lineF','var'), lineF=[]; end
         warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')
         doLineF = false;
     end
@@ -154,10 +158,20 @@ if doLineF
     LFcycleLength = max(diff(whereUp)+3);
     % meanPeriod = mean(whereUp);
     if Global || Adaptive  % use one average for the entire file
+%         MEGlfCycle = zeros(numMEGchans,LFcycleLength);
         if exist('XTR','var')
             XTRlfCycle = zeros(size(XTR,1),LFcycleLength);
         end
+%     elseif PhasePrecession % use interpolation
+%         MEGlfCycle = zeros(numMEGchans,3*LFcycleLength);
+%         if exist('XTR','var')
+%             XTRlfCycle = zeros(length(chixSorted),3*LFcycleLength);
+%         end
+%     else
+%         disp(['The only legal cleaning methods are: ''Global'''...
+%             ', ''Adaptive'', or ''PhasePrecession'''])
     end
+%     totalCycles =0; % cycles of LF
     
     %% check if any channel is too big or too noisy
     ignoreChans = false(1, numMEGchans);
@@ -215,6 +229,13 @@ if doLineF
         end
         MEGlfCycle = MEGlfCycle+sumC;
         totalCycles = totalCycles+numCyclesHere-1;
+%         sumC = zeros(numREFchans,maxL+1);
+%         for cycle = 1:numCyclesHere-1;
+%             startCycle = whereUp(cycle);
+%             if startCycle+maxL <= size(MEG,2)
+%                 sumC = sumC + REF(:,startCycle:startCycle+maxL);
+%             end
+%         end
         if exist('XTR','var')
             sumC = zeros(size(XTR,1),maxL+1);
             XTRlfCycle = zeros(size(sumC));
@@ -279,7 +300,7 @@ end
 %% clean the Heart Beat
 if doHB
     mMEG = mean(MEG(chans2analyze,:),1);
-    [~, ~, Errors, ~, ~, figH, QRS]= findHB01(mMEG, samplingRate,HBperiod,...
+    [tilda, tilda, Errors, tilda, tilda, figH, QRS]= findHB01(mMEG, samplingRate,HBperiod,...
         'PLOT', 'VERIFY');
     drawnow
     if (length(Errors.shortHB)>3) || (length(Errors.longHB)>3) || (Errors.numSmallPeaks>3) % added by Yuval
