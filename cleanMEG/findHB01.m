@@ -167,34 +167,30 @@ if verify
     % HBperiod = mean(dHB);
     if max(dHB)>slowest*samplingRate
         whereSlow = wherisHB(dHB>=slowest*samplingRate)/samplingRate;
-        S=sprintf(['MATLAB:MEGanalysis:unreasonableValue\n',...
-            'Too slow Heart beat periods in %f %f %f'],whereSlow);
-        disp(S);
-        Errors.longHB = whereSlow;
+        warning('MATLAB:MEGanalysis:unreasonableValue',...
+            ['Too slow Heart beat periods in ' num2str(whereSlow')]);
+        Errors.longHB = whereSlow';
     end
     if min(dHB)<fastest*samplingRate
         whereFast = wherisHB(dHB<=fastest*samplingRate)/samplingRate;
-        S=sprintf(['MATLAB:MEGanalysis:unreasonableValue\n',...
-            'Too fast Heart beat periods in %f %f %f'], whereFast);
-        disp(S);
-        Errors.shortHB = whereFast;
+        warning('MATLAB:MEGanalysis:unreasonableValue',...
+            ['Too fast Heart beat periods in ' num2str(whereFast')]);
+        Errors.shortHB = whereFast';
     end
     % check for amplitudes
     peaks = sMEG(wherisHB);
     meanPeak = mean(peaks);
     whereSmall = wherisHB(peaks<smallest*meanPeak)/samplingRate;
     if ~isempty(whereSmall)
-        S=sprintf(['MATLAB:MEGanalysis:unreasonableValue\n',...
-            'Too small Heart beat amplitude in %f %f %f'], whereSmall);
-        disp(S);
-        Errors.smallHB = whereSmall;
+        warning('MATLAB:MEGanalysis:unreasonableValue',...
+            ['Too small Heart beat amplitude in ' num2str(whereSmall')]);
+        Errors.smallHB = whereSmall';
     end
     whereBig = wherisHB(peaks>biggest*meanPeak)/samplingRate;
     if ~isempty(whereBig)
-        S=sprintf(['MATLAB:MEGanalysis:unreasonableValue\n',...
-            'Too large Heart beat amplitude in %f %f %f'],whereBig);
-        Errors.bigHB = whereBig;
-        disp(S);
+        warning('MATLAB:MEGanalysis:unreasonableValue',...
+            ['Too large Heart beat amplitude in ' num2str(whereBig')]);
+        Errors.bigHB = whereBig';
     end
     if dbgPlot  % mark the outliers
         whereMark = sort([Errors.longHB Errors.shortHB Errors.smallHB Errors.bigHB]);
