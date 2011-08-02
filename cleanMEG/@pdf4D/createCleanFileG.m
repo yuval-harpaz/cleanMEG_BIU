@@ -1,7 +1,4 @@
 function cleanCoefs = createCleanFileG(~, inFile, varargin)
-
-% NOTE, uses Tilde '~' for ignored variables, requires a recent matlab version.
-
 % Create a new pdf file from an old one
 % cleanCoefs = createCleanFileE(pdf, inFile, , varargin);
 %    e.g.
