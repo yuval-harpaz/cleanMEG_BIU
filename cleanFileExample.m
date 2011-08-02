@@ -1,6 +1,6 @@
 %example of cleaning script
 % better not change it, for editing save it with another name in Documents/MATLAB
-fileName = 'c,rfhp1.0Hz';
+fileName = 'c,rfhp0.1Hz';
 p=pdf4D(fileName);
 cleanCoefs = createCleanFile(p, fileName,...
     'byLF',256 ,'Method','Adaptive',...
