@@ -1,8 +1,8 @@
 function [mData, vData] = meanAround(Data, whereCycle, iBefore, iAfter,...
-    toFlipUD, toShiftLR)
+    toFlipUD, toShiftLR, onPeak)
 % compute the average around whereCycle
 %   [mData, vData] = meanAround(Data, whereCycle, iBefore, iAfter,... 
-%            toFlipUD, toShiftLR);
+%            toFlipUD, toShiftLR, onPeak);
 %
 % Data       - a raw vector with data to be cleaned
 % whereCycle - list of indices into Data where the cycles are
@@ -13,6 +13,9 @@ function [mData, vData] = meanAround(Data, whereCycle, iBefore, iAfter,...
 % toShiftLR  - n means try to shift the data left or right by n samples
 %              till there is maximal overlap with the mean.  notSpecified
 %              or [] or 0 mean donot shift.
+% onPeak     - 'peak' or 'slope'. 'peak' means flip if the peak at
+%              whereCycle is positive, 'slope' means flip if slope is
+%              positive.  [default 'slope']
 %
 % mData      - the cleaned data, vector of length(1+iBefore+iAfter)
 % vData      - the variance around the mean
@@ -37,6 +40,10 @@ else
     toShift = true;
 end
 toFlip = strcmpi(toFlipUD, 'FLIP');
+if ~exist('onPeak','var'), onPeak=[];end
+if isempty(onPeak), onPeak='slope'; end
+onSlope = strcmpi(onPeak, 'SLOPE');
+
 mData = zeros(1,1+iBefore+iAfter);
 vData = mData;
 allData = zeros(length(whereCycle),1+iBefore+iAfter);
@@ -72,14 +79,25 @@ end
 %% flip for maximal similarity
 if toFlip
     tmpM = mData-mean(mData);
+    % reset mData and vData to 0
+    mData = zeros(1,1+iBefore+iAfter);
+    vData = mData;
+    nn=0;
     for cycle = 1:length(whereCycle)
         zData = whereCycle(cycle);
         dBack = zData-iBefore;
         dFore = zData+iAfter;
         if dBack>0 && dFore<=length(Data);
             thisPiece = Data(dBack:dFore);
-            if sum(tmpM.*(thisPiece-mean(thisPiece)))<0
-                thisPiece = -thisPiece;  % flip UpDown
+            thisPiece = thisPiece - mean(thisPiece);
+            if onSlope % make all slopes in the same direction
+                if sum(tmpM.*(thisPiece-mean(thisPiece)))<0
+                    thisPiece = -thisPiece;  % flip UpDown
+                end
+            else  % on peak
+                pval = thisPiece(iBefore+1) - ...
+                    0.5*(thisPiece(iBefore-1) + thisPiece(iBefore+3));
+                if pval>0, thisPiece = -thisPiece; end
             end
             mData = mData +thisPiece;
             vData = vData +thisPiece.*thisPiece;
@@ -87,12 +105,16 @@ if toFlip
             allData(cycle,:) = thisPiece;
         end
     end
-end  % end of toFli[
+end  % end of toFlip
 
 %% shift left right till maximal similarity
 if toShift  
     tmpM = mData-mean(mData);
     pLength = length(tmpM)-1;
+    % reset mData and vData to 0
+    mData = zeros(1,1+iBefore+iAfter);
+    vData = mData;
+    nn=0;
     for cycle = 1:length(whereCycle)
         zData = whereCycle(cycle);
         dBack = zData-iBefore;

@@ -839,7 +839,6 @@ for ii = 1:numPieces
     % read the MEG
     MEG = read_data_block(p, [startI,endI], chiSorted);
     whereBig = nan(1,numGoodChans);
-
     bigAmplitude = nan(1,numGoodChans);
     tBigStep=[];
     atEnd = false;
