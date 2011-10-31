@@ -445,7 +445,7 @@ end
 trig = read_data_block(pIn,double(samplingRate*[1,testT]),chit);
 MEG = read_data_block(pIn,double(samplingRate*[1,testT]),chiSorted);
 [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR,...
-                            doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal);
+                            doLineF, doXclean, doHB, chans2ignore, stepDur);
 if doLineF 
     if isempty(trig)
         warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')

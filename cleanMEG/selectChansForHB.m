@@ -14,6 +14,9 @@ function selectChans = selectChansForHB(MEG, samplingRate, chans2ignore)
 %        changing the definitions at the beginning of the program.
 
 % Feb-2011  MA
+% UPDATES
+% Apr-2011 Endless loop when variance of QRS peaks is very homogenous
+%          -fixed MA
 
 %% initialize
 numChans = size(MEG,1);
@@ -42,12 +45,14 @@ md = mad(vr);
 tooNoisy = find(vr>(mn + 3*md));
 
 %% test that reasonable
-while length(tooNoisy)<minTooNoisy  % too few
+while ~isempty(tooNoisy) && length(tooNoisy)<minTooNoisy  % too few
     mf(tooNoisy,:) = 0;
     vr = var(mf,[],2);
     mn = median(vr);
     md = mad(vr);
-    tooNoisy = unique([tooNoisy; find(vr>(mn + 3*md))]);
+    newTooNoisy =find(vr>(mn + 3*md));
+    if isempty(newTooNoisy), break; end
+    tooNoisy = unique([tooNoisy; newTooNoisy]);
 end
 if length(tooNoisy) > maxTooNoisy  % too many
     [sortedVr,I] = sort(vr, 'descend');

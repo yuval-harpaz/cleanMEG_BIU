@@ -1,15 +1,16 @@
              Instruct.txt
 Instruction for off-line cleaning MEG data
-08-Nov-2010
+19-Jul-2011
 
 Move to the cleanMEG directory:
 >> cd cleanMEG
 >> addpath(pwd);
 >> fileName = 'D:\DATA\MEG\Noise\2010_10_26\Digital\2\c,rfhp1.0Hz';
 >> p=pdf4D(fileName);
->> cleanCoefs = createCleanFileF(p, fileName,'byLF',256 ,...
+>> cleanCoefs = createCleanFileH(p, fileName,'byLF',[256,512] ,...
       'Method','Adaptive' , 'xClean',[4,5,6], 'chans2ignore',[74,204] ,...
-      'byFFT',1 , 'HeartBeat',0.9);
+      'byFFT',1 , 'HeartBeat',0.8, 'RInclude','Automatic', ...
+      'stepCorrect',1);
 Use 
 >> help createCleanFileF 
 to understand what the various options are.
@@ -17,8 +18,9 @@ to understand what the various options are.
 This will produce a file named:  'xc,cf,hb,lf_c,rfhp1.0Hz'
 In the same directory as the original file
 
-If you use 'byFFT',1 then save the resulting  cleanCoefs  in the future
-they wii be needed for source localization.
+Save the resulting  cleanCoefs for finding where there 
+were problems. Also, in the future
+they will be needed for source localization.
 
 
 If you donot want to clean by Heart-Beats use
@@ -30,7 +32,9 @@ If there is no accelerometers signal to clean, eliminate
 If there are no channels to ignore, eliminate
     'chans2ignore',[74,204]
 However the program may still decide that some channels are bad and 
-ignore them.  A warning message is issued in this case.  Ignored 
-channels are left as they are without any cleaning.
+ignore them.  A warning message is issued in this case. You may 
+overcome some of these automatic detection by adding:
+'hugeVal', 1e-6 (the default is 1e-8).
+Ignored channels are left as they are without any cleaning.
 
 M Abeles
