@@ -33,7 +33,7 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
 lf = 50;                  % expected line frequrncy
 Adaptive = lf==lf;        % how to clean the LF
 Global = ~Adaptive;       % how to clean the LF
-outLierMargin = 10;       % channel with values that exceede 10 std are bad
+outLierMargin = 20;       % channel with values that exceede 20 std are bad
 minVarAcc = 1e-4;         % XTR must have this variance or more
 maxF = ceil(0.8*samplingRate/2);
 if maxF>=140
