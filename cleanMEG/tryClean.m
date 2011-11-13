@@ -1,5 +1,5 @@
 function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
-    Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal)
+    Trig, XTR, xChannels, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal)
 % Try to clean a piece of MEG to see if all can work
 %    [doLineF, doXclean, doHB, figH, QRS, chans2ignore] = tryClean...
 %           (MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB,...
@@ -44,7 +44,7 @@ if maxF>=140
 else
     xBand = 1:maxF;    % the XTR cleaning bands
 end
-xChannels = 4:6;        % channels on which acceleration is recorded
+% xChannels = 4:6;        % channels on which acceleration is recorded
 HBperiod = 0.8;           % expected heart beat period in s.
 
 % define missing params
