@@ -66,8 +66,8 @@ if lastSample/samplingRate <25
     warning('MATLAB:MEGanalysis:notEnoughData','Data is too short to reliably clean the hart beat')
 end
 if ~exist('HBperiod','var'), HBperiod=[]; end
-if isempty(HBperiod), HBperiod=1.1; end % estimate of the heart HBperiod
-slowest = 1.7*HBperiod;   % lowest limit of HB period
+if isempty(HBperiod), HBperiod=1; end % estimate of the heart HBperiod
+slowest = 2*HBperiod;   % lowest limit of HB period
 fastest = 0.5*HBperiod;   % highest limit of HB period
 
 beatPeriod = round(1.2*samplingRate*HBperiod);

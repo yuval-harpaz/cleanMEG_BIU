@@ -121,8 +121,6 @@ hugeVal = 1e-8;       % impossibly large MEG data
 Method = 'Global';    % use global mean for cleaning LF
 doXclean = false;     % default - no cleaning by XTR
 xBand=[];
-xChannels=[];
-ECG=[];
 maskTrig = false;
 doStep = false;
 trigBits2mask=nan(1,16);
@@ -154,7 +152,7 @@ if nargin > 2
     okargs = {'outFile', 'byLF', 'byFFT', 'RInclude', 'RiLimit','HeteroCoefs',...
         'DefOverflow', 'CleanPartOnly', 'HeartBeat', 'xClean', 'xBands', ...
         'Method', 'chans2ignore', 'Memory', 'noQuestions', 'maskTrigBits'...
-        'stepCorrect', 'hugeVal','ECG'};
+        'stepCorrect', 'hugeVal'};
     %     okargs = lower(okargs);
     for j=1:2:nargin-2
         pname = varargin{j};
@@ -256,8 +254,6 @@ if nargin > 2
                     end
                 case 18 % hugeVal
                     hugeVal = pval;
-                case 19
-                    ECG=pval;
             end  % end of switch
         end  % end of tests for unique arg name
     end  % end of testing for even number of argumants
@@ -441,12 +437,8 @@ end
 % end
 trig = read_data_block(pIn,double(samplingRate*[1,testT]),chit);
 MEG = read_data_block(pIn,double(samplingRate*[1,testT]),chiSorted);
-ECGT=[];
-if ~isempty(ECG)
-    ECGT = ECG(1,1:size(MEG,2));
-end
-[doLineF, doXclean, doHB, figH, QRS] = tryCleanDraft(MEG, samplingRate, trig, XTR, xChannels,...
-                            doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal,ECGT,HBperiod);
+[doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR, xChannels,...
+                            doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal);
 if doLineF 
     if isempty(trig)
         warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')
@@ -960,7 +952,7 @@ if doLineF
         startI = startApiece(ii);
         startT = startI/samplingRate;
         endI  = stopApiece(ii);
-        disp(['finding LF for: ' num2str(round([startI,endI]/samplingRate))])
+        disp(['finding LF for: ' num2str([startI,endI]/samplingRate)])
         
         trig = read_data_block(p, [startI,endI], chit);
 %         whereUp=find(diff(mod(trig,2*lineF-1)>=lineF)==1);
@@ -1131,7 +1123,7 @@ if doHB||doLineF||doXclean
         startT = startI/samplingRate;
         endI  = stopApiece(ii);
         if doLineF
-            disp(['cleaning LF for the piece ' num2str(round([startI,endI]/samplingRate))])
+            disp(['cleaning LF for the piece ' num2str([startI,endI]/samplingRate)])
         end
         transitions(ii) = endI;
         MEG = read_data_block(p, [startI,endI], chiSorted);
@@ -1294,15 +1286,14 @@ if doHB||doLineF||doXclean
                     XTR(nc,:)=y;
                 end
             end
-            if useTrig2 || ~isempty(linePeriod2)
-                warning('MATLAB:MEGanalysis:NotUsed','Second LF trig is not used for now.')
-                warning('OFF','MATLAB:MEGanalysis:NotUsed');  % do not repeat this warning
-            end
         end
-        
+        if useTrig2 || ~isempty(linePeriod2)
+            warning('MATLAB:MEGanalysis:NotUsed','Second LF trig is not used for now.')
+            warning('OFF','MATLAB:MEGanalysis:NotUsed');  % do not repeat this warning
+        end
         %% clean by the extarnal lines if needed
         if doXclean
-            disp(['cleaning XTR channels for the piece ' num2str(round([startI,endI]/samplingRate))])
+            disp(['cleaning XTR channels for the piece ' num2str([startI,endI]/samplingRate)])
             for nc = chans2analyze
                 x=MEG(nc,:);
                 y = coefsAllByFFT(x, XTR(xChannels,:),...
@@ -1320,14 +1311,10 @@ if doHB||doLineF||doXclean
         %% HB period
         
         if doHB 
-            disp(['Finding heart beat for the piece ' num2str(round([startI,endI]/samplingRate))])
+            disp(['Finding heart beat for the piece ' num2str([startI,endI]/samplingRate)])
             selectChans = selectChansForHB(MEG, samplingRate, chans2ignore);
 %             mMEG = mean(MEG(chans2analyze,:),1);
-            if ~isempty(ECG)
-                mMEG=ECG(1,startI:endI);
-            else
-                mMEG = mean(MEG(selectChans,:),1);
-            end
+            mMEG = mean(MEG(selectChans,:),1);
             if  ii==1 % do on first run only
                 [whereisHB, zTime, Errors,amplitudes]= findHB01(mMEG, samplingRate,HBperiod,...
                     'NoPLOT', 'VERIFY');
@@ -1562,11 +1549,11 @@ for ii = 1:numPieces
 %     startT = startI/samplingRate;
     endI  = stopApiece(ii);
     if doHB&&doFFT
-        disp(['cleaning HB and by FFT for the piece ' num2str(round([startI,endI]/samplingRate))])
+        disp(['cleaning HB and by FFT for the piece ' num2str([startI,endI]/samplingRate)])
     elseif doHB &&~doFFT
-        disp(['cleaning HB for the piece ' num2str(round([startI,endI]/samplingRate))])
+        disp(['cleaning HB for the piece ' num2str([startI,endI]/samplingRate)])
     else
-        disp(['cleaning by FFT for the piece ' num2str(round([startI,endI]/samplingRate))])
+        disp(['cleaning by FFT for the piece ' num2str([startI,endI]/samplingRate)])
     end
     transitions(ii) = endI;
 
@@ -1908,14 +1895,8 @@ if doHB
     range = round(0.05*samplingRate); % 50 ms
     sMEG = sMEG(range:end-range+1);
     figure(figH);
-    if ~isempty(ECGT)
-        plot(sMEG/max(mMEG),'r');
-        legend('ECG','mean MEG after HB cleaning')
-    else
-        plot(sMEG,'r');
-        legend('Original','mean MEG after HB cleaning')
-    end
-    
+    plot(sMEG,'r');
+    legend('Original','HB cleaned')
     
 end
 %% wrap up
