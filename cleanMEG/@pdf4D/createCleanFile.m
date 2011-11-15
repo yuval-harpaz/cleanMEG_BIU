@@ -445,7 +445,7 @@ ECGT=[];
 if ~isempty(ECG)
     ECGT = ECG(1,1:size(MEG,2));
 end
-[doLineF, doXclean, doHB, figH, QRS] = tryCleanDraft(MEG, samplingRate, trig, XTR, xChannels,...
+[doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR, xChannels,...
                             doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal,ECGT,HBperiod);
 if doLineF 
     if isempty(trig)
