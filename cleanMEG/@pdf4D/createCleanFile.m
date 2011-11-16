@@ -79,6 +79,11 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 % cleanCoefs  - cell Array with coefsAllByFFT for each section 
 %               (containing section definition, PCs for REF and 
 %               weights for cleaning as well as the the Heart Beat).
+% 'ECG'       - a vector of ECG like values. real ECG or ica trace of heart component.
+%               intended for peak detection of heartbeat when the mean MEG 
+%               signal is not clear. NOTE that the image of before and
+%               after HB cleaning will show the ECG channel (blue) and the
+%               mean HB after cleaning (red).
 %
 % 
 % NOTE this will work properly only if data in the file is continuous.
