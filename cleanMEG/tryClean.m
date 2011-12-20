@@ -1,5 +1,5 @@
 function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
-    Trig, XTR, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal)
+    Trig, XTR, xChannels, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal,ECG,HBperiod)
 % Try to clean a piece of MEG to see if all can work
 %    [doLineF, doXclean, doHB, figH, QRS, chans2ignore] = tryClean...
 %           (MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB,...
@@ -27,18 +27,15 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
 %      from which the data was collected.
 
 % Dec-2010  MA
-%    UPDATES
-% Dec-2011 using PSD to find if there is a hi-f noise.  If sampling rate is
-%          below 750 no test for big steps or hi-f noise.  MA
 
 %% initialize
 % some default params
 lf = 50;                  % expected line frequrncy
 Adaptive = lf==lf;        % how to clean the LF
 Global = ~Adaptive;       % how to clean the LF
-outLierMargin = 10;       % channel with values that exceede 10 std are bad
+outLierMargin = 20;       % channel with values that exceede 20 std are bad
 minVarAcc = 1e-4;         % XTR must have this variance or more
-maxF = ceil(0.7*samplingRate/2);
+maxF = ceil(0.8*samplingRate/2);
 if maxF>=140
     xBand = [1:139,140:20:maxF,maxF]'; % the XTR cleaning bands
     if xBand(end-1)==xBand(end)
@@ -47,20 +44,8 @@ if maxF>=140
 else
     xBand = 1:maxF;    % the XTR cleaning bands
 end
-if maxF<250 
-    testSteps=false;
-    warning('MATLAB:MEGanalysis:CannotTest',...
-        'Sampling rate too slow for testing big steps')
-else
-    testSteps=true;
-    %compute Fbands for hi-f noise
-    F1=2*lf+3;
-    F2=3*lf-3;
-    F3=3*lf+10;
-    F4= 0.9*maxF;
-end
-xChannels = 4:6;        % channels on which acceleration is recorded
-HBperiod = 0.8;           % expected heart beat period in s.
+% xChannels = 4:6;        % channels on which acceleration is recorded
+% HBperiod = 0.8;           % expected heart beat period in s.
 
 % define missing params
 if ~exist('chans2ignore', 'var'), chans2ignore = []; end
@@ -81,7 +66,7 @@ if ~exist('hugeVal','var'), hugeVal=[]; end
 if isempty(hugeVal)
     hugeVal  = 1e-9;      % impossibly large MEG data
 end
-
+if ~exist('HBperiod', 'var'), HBperiod = []; end
 figH=[];  % in case not HB is done
 QRS=[];
 
@@ -91,48 +76,28 @@ ignoreChans(chans2ignore)=true;
 chans2analyze = find(~ignoreChans);
 
 %% remove big steps if any
-if testSteps
-    bigStep=false(1,numMEGchans);
-    whereBig = nan(1,numMEGchans);
-    for iii=chans2analyze
-        x = MEG(iii,:);
-        %% try to see if there is high frequncy noise in this piece
-        [PSD, F] = myPSD (x, samplingRate, 0.25, 'FFT', 'noDC');
-        f1 = find(F>F1,1);
-        f2 = find(F>F2,1);
-        f3 = find(F>F3,1);
-        f4 = find(F>F4,1);
-        mx=max(PSD(f3:f4));
-        mn=median(PSD(f1:f2));
-        ss=mad(PSD(f1:f2));
-        oPSD =(mx-mn)/ss;
-        if oPSD<10  % reasonable noise
-            [where, ~, atEnd] = findBigStep(x,samplingRate,[], stepDur, [],...
-                num2str(iii), '0');
-            if ~isempty(where) && ~atEnd
-                bigStep(iii)=true;
-                whereBig(iii) = where;
-            end
-        else
-            % NOTE
-            % in future version find on which time sections there is big noise
-            % and ignore only those
-            disp(['High frequency noise in channel A' num2str(iii) ...
-                ', No search for big steps' ])
-        end
-    end
-    numBigSteps = sum(bigStep);
-    if numBigSteps>3 % clean the steps
-        chans2clean = find(bigStep);
-        for iii=chans2clean
-            x = MEG(iii,:);
-            where = whereBig(iii);
-            MEG(iii,:) = removeStep(x, where, samplingRate);
-        end
-    elseif numBigSteps>0 % marks this channels to be excluded for now
-        chans2ignore = unique([chans2ignore find(bigStep)]);
+bigStep=false(1,numMEGchans);
+whereBig = nan(1,numMEGchans);
+for iii=chans2analyze
+    x = MEG(iii,:);
+    [where, ~, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
+    if ~isempty(where) && ~atEnd
+        bigStep(iii)=true;
+        whereBig(iii) = where;
     end
 end
+numBigSteps = sum(bigStep);
+if numBigSteps>3 % clean the steps
+    chans2clean = find(bigStep);
+    for iii=chans2clean
+        x = MEG(iii,:);
+        where = whereBig(iii);
+        MEG(iii,:) = removeStep(x, where, samplingRate);
+    end
+elseif numBigSteps>0 % marks this channels to be excluded for now
+    chans2ignore = unique([chans2ignore find(bigStep)]);
+end
+
 %% check if any channel is too big or too noisy
 ignoreChans = false(1, numMEGchans);
 ignoreChans(chans2ignore) = true;
@@ -313,7 +278,13 @@ end
 
 %% clean the Heart Beat
 if doHB
+    
     mMEG = mean(MEG(chans2analyze,:),1);
+    if ~isempty(ECG);
+        mMEG=ECG;
+    end
+        
+        
     [~, ~, Errors, ~, ~, figH, QRS]= findHB01(mMEG, samplingRate,HBperiod,...
         'PLOT', 'VERIFY');
     drawnow
