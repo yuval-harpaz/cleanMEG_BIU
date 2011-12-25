@@ -450,8 +450,15 @@ ECGT=[];
 if ~isempty(ECG)
     ECGT = ECG(1,1:size(MEG,2));
 end
-[doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR, xChannels,...
-                            doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal,ECGT,HBperiod);
+if exist('tryCleanOP.mat','file')
+    load tryCleanOP
+else
+    [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR, xChannels,...
+        doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal,ECGT,HBperiod);
+    if aPieceOnly
+        save tryCleanOP doLineF doXclean doHB figH QRS
+    end
+end
 if doLineF 
     if isempty(trig)
         warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')
