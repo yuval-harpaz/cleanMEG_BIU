@@ -44,6 +44,18 @@ if maxF>=140
 else
     xBand = 1:maxF;    % the XTR cleaning bands
 end
+if maxF<250 
+    testSteps=false;
+    warning('MATLAB:MEGanalysis:CannotTest',...
+        'Sampling rate too slow for testing big steps')
+else
+    testSteps=true;
+    %compute Fbands for hi-f noise
+    F1=2*lf+3;
+    F2=3*lf-3;
+    F3=3*lf+10;
+    F4= 0.9*maxF;
+end
 % xChannels = 4:6;        % channels on which acceleration is recorded
 % HBperiod = 0.8;           % expected heart beat period in s.
 
@@ -76,26 +88,46 @@ ignoreChans(chans2ignore)=true;
 chans2analyze = find(~ignoreChans);
 
 %% remove big steps if any
-bigStep=false(1,numMEGchans);
-whereBig = nan(1,numMEGchans);
-for iii=chans2analyze
-    x = MEG(iii,:);
-    [where, ~, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
-    if ~isempty(where) && ~atEnd
-        bigStep(iii)=true;
-        whereBig(iii) = where;
-    end
-end
-numBigSteps = sum(bigStep);
-if numBigSteps>3 % clean the steps
-    chans2clean = find(bigStep);
-    for iii=chans2clean
+if testSteps
+    bigStep=false(1,numMEGchans);
+    whereBig = nan(1,numMEGchans);
+    for iii=chans2analyze
         x = MEG(iii,:);
-        where = whereBig(iii);
-        MEG(iii,:) = removeStep(x, where, samplingRate);
+        %% try to see if there is high frequncy noise in this piece
+        [PSD, F] = myPSD (x, samplingRate, 0.25, 'FFT', 'noDC');
+        f1 = find(F>F1,1);
+        f2 = find(F>F2,1);
+        f3 = find(F>F3,1);
+        f4 = find(F>F4,1);
+        mx=max(PSD(f3:f4));
+        mn=median(PSD(f1:f2));
+        ss=mad(PSD(f1:f2));
+        oPSD =(mx-mn)/ss;
+        if oPSD<10  % reasonable noise
+            [where, ~, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
+            if ~isempty(where) && ~atEnd
+                bigStep(iii)=true;
+                whereBig(iii) = where;
+            end
+        else
+            % NOTE
+            % in future version find on which time sections there is big noise
+            % and ignore only those
+            disp(['High frequency noise in channel A' num2str(iii) ...
+                ', No search for big steps' ])
+        end
     end
-elseif numBigSteps>0 % marks this channels to be excluded for now
-    chans2ignore = unique([chans2ignore find(bigStep)]);
+    numBigSteps = sum(bigStep);
+    if numBigSteps>3 % clean the steps
+        chans2clean = find(bigStep);
+        for iii=chans2clean
+            x = MEG(iii,:);
+            where = whereBig(iii);
+            MEG(iii,:) = removeStep(x, where, samplingRate);
+        end
+    elseif numBigSteps>0 % marks this channels to be excluded for now
+        chans2ignore = unique([chans2ignore find(bigStep)]);
+    end
 end
 
 %% check if any channel is too big or too noisy
