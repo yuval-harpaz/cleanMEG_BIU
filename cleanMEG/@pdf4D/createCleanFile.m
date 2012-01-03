@@ -365,6 +365,10 @@ else % non standard file name - assume 0.1Hz
     hiPass = 0.1;
 end
 stepDur = 0.02/hiPass;
+if ~doStep
+    stepDur=0;
+end
+    
 
 pIn=pdf4D(inFile);
 %% get basic info on the file
@@ -839,19 +843,19 @@ fid = fopen(outFile, 'r+', 'b');
 if fid == -1
     error('Cannot open file %s', outFile);
 end
-
+chans2analyze = find(~ignoreChans);
+numGoodChans = sum(~ignoreChans);
+cleanCoefs(1:numPieces) = cleanInfo;
 %% Look for big steps and move the bounderies so that no step is near the
 % edge
 if ~doStep
-    disp('reading the entire file and searching for large step like artifacts')
+    disp('NOT searching for large step like artifacts')
 else
     disp('reading the entire file and fixing large step like artifacts')
-end
-chans2analyze = find(~ignoreChans);
-numGoodChans = sum(~ignoreChans);
+
 % whereBigSteps = cell(1,numPieces);
 % bigAmplitudes = cell(1,numPieces);
-cleanCoefs(1:numPieces) = cleanInfo;
+
 for ii = 1:numPieces
     startI = startApiece(ii);
     startT = startI/samplingRate;
@@ -898,10 +902,11 @@ for ii = 1:numPieces
         ignoreChans(chanNo) = true;
         warning('MATLAB:MEGanalysis:nonValidData', ...
             ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-            num2str((startI+junkData)/samplingRate), ' ignoring channel ' num2str(chanNo)]); 
+            num2str((startI+junkData)/samplingRate), ' ignoring channel ' num2str(chanNo)]);
         chans2analyze(chan)=[]; % exclude it
     end
     
+end
 end
 
 %% decide on size of time slice to process
@@ -1029,6 +1034,9 @@ if doLineF
         end
         if exist('chixSorted','var')  % read the reference channels
             XTR = read_data_block(p, [startI,endI], chixSorted);
+        end
+        if ~isfield(cleanCoefs(ii),'bigStep')
+            cleanCoefs(ii).bigStep = [];
         end
         if ~isempty(cleanCoefs(ii).bigStep) && doStep % remove the step
             whereBig = cleanCoefs(ii).whereBig;

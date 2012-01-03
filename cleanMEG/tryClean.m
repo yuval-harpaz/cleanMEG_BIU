@@ -48,6 +48,9 @@ if maxF<250
     testSteps=false;
     warning('MATLAB:MEGanalysis:CannotTest',...
         'Sampling rate too slow for testing big steps')
+elseif ~stepDur
+    testSteps=false;
+    warning('MATLAB:MEGanalysis: Not Testing big steps')
 else
     testSteps=true;
     %compute Fbands for hi-f noise
