@@ -818,15 +818,22 @@ if ~epoched
         end
     else
         numSamples = round((tEnd-tStrt)*samplingRate);
+%         if tStrt==0;
+%             numSamples=numSamples-1; % not taking sample # 0
+%         end
         numPieces = ceil(numSamples/samplesPerPiece);
         samplesPerPiece= floor(numSamples/numPieces);
         firstS = floor(tStrt*samplingRate);
         lastSample = firstS + numSamples-1;
+        if firstS==0
+            firstS=1;
+        end
         startApiece = firstS:samplesPerPiece:lastSample;
         stopApiece  = startApiece+samplesPerPiece;
         deltaEnd = lastSample-stopApiece(end);
         if deltaEnd<0
             stopApiece(end) = lastSample;
+            display(['samples : ',num2str(startApiece),' - ',num2str(stopApiece)]);
         else
             error ('wrong division of data')
         end
