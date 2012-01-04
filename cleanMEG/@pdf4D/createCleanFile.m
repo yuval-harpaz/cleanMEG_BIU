@@ -1500,6 +1500,12 @@ if doHB||doLineF||doXclean
             if doLineF
                 trig=oldData(chit,:);
                 trig = clearBits(trig, lineF);
+                numTrigs=sum(~isnan(trigBits2mask));
+                if numTrigs>0
+                    for trigsi=1:numTrigs
+                        trig=clearBits(trig, trigBits2mask(trigsi));
+                    end
+                end
                 oldData(chit,:)=trig;
             end
             status = fseek(fid, time_slice_size * (lat-1), 'bof');
