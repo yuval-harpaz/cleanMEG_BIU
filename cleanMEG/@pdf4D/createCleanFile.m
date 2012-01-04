@@ -846,6 +846,11 @@ end
 chans2analyze = find(~ignoreChans);
 numGoodChans = sum(~ignoreChans);
 cleanCoefs(1:numPieces) = cleanInfo;
+if ~doStep
+    for segi=1:numPieces
+        cleanCoefs(segi).bigStep=[];
+    end
+end
 %% Look for big steps and move the bounderies so that no step is near the
 % edge
 if ~doStep
@@ -1629,11 +1634,11 @@ for ii = 1:numPieces
         whereisHB = findHB01(mMEG, samplingRate,[], 'noPLOT', 'noVERIFY');
         % check for a missing beat at the edges
         if whereisHB(1)>max(diff(whereisHB))  % missed at start
-            tmpHB = [whereisHB(1)-mean(diff(whereisHB)); whereisHB];
+            tmpHB = [whereisHB(1)-round(mean(diff(whereisHB))), whereisHB];
             whereisHB = tmpHB;
         end
         if length(mMEG)-whereisHB(end)>max(diff(whereisHB))  % missed at end
-            tmpHB = [whereisHB; whereisHB(end)+mean(diff(whereisHB))];
+            tmpHB = [whereisHB, whereisHB(end)+round(mean(diff(whereisHB)))];
             whereisHB = tmpHB;
         end
         QRSbefore = -round(QRSstartT*samplingRate);
