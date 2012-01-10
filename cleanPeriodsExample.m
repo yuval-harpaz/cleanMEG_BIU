@@ -28,7 +28,7 @@ for segi=1:size(goodPeriods,2)
         'noQuestions',1,...
         'byFFT',0,...
         'HeartBeat',[],... % for automatic HB cleaning change 0 to []
-        'maskTrigBits', []);
+        'maskTrigBits', 512);
     if exist('temp1','file')
         !rm temp1
     end
