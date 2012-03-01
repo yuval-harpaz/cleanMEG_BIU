@@ -1561,8 +1561,7 @@ if doHB
             % minHBcycle = minHere;
         else
             whereShort = HB(ii).whereisHB(diff(HB(ii).whereisHB)==minHere)/samplingRate;
-            warning('MATLAB:MEGanalysis:inapropriateValue','Shortest cycle too small at %d %d %d',...
-                whereShort+startT);
+            warning('MATLAB:MEGanalysis:inapropriateValue',['Shortest cycle too small at ',num2str(whereShort+startT)])
             % add to the errors
             err = HB(ii).Errors;
             shErr = [err.shortHB whereShort];
