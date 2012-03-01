@@ -14,16 +14,27 @@
 
 fileName='c,rfhp0.1Hz';
 fileNameOrig=fileName;
-cleanPeriods=findCleanPeriods(fileName);
-goodPeriods=sumGoodPeriods(fileName,cleanPeriods,[]);
 
-for segi=1:size(goodPeriods,2)
+% finding good periods for every channels. based on fft run with a 
+% window of 2s sliding in steps of 0.5s. gives for every channel collumns
+% of beginning and end times of clean periods.
+cleanPeriodsAllChans=findCleanPeriods(fileName);
+
+% deciding which time points are realy clean. strictest is when for a given
+% time point there is no bad channel. for this the third argument
+% (chanNumThr) has to be 1. the default is 20, that is if 20 channels or more are
+% noisy at a sertain a time point it is considered as bad.
+cleanPeriods=sumGoodPeriods(fileName,cleanPeriodsAllChans,[]);
+% removing too short good periods, less than 5s long
+notTooShort=find((cleanPeriods(2,:)-cleanPeriods(1,:))>=5);
+cleanPeriods=cleanPeriods(:,notTooShort);
+save cleanPeriods cleanPeriods
+for segi=1:size(cleanPeriods,2)
     p=pdf4D(fileName);
     cleanCoefs = createCleanFile(p, fileName,...
-        'byLF',256 ,'Method','Adaptive',...
+        'byLF',512 ,'Method','Adaptive',...
         'xClean',[4,5,6],...
-        'CleanPartOnly',[goodPeriods(1,segi) goodPeriods(2,segi)],...
-        'chans2ignore',[74,204],...
+        'CleanPartOnly',[cleanPeriods(1,segi) cleanPeriods(2,segi)],...
         'outFile','temp2',...
         'noQuestions',1,...
         'byFFT',0,...

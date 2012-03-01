@@ -15,9 +15,9 @@ hdr=get(p,'header');
 sampleRate=get(p,'dr');
 goodsamples1=zeros(1,hdr.epoch_data{1,1}.pts_in_epoch);
 for chani=1:length(cleanPeriods)
-    for periodi=1:length(cleanPeriods{1,chani})
+    for periodi=1:size(cleanPeriods{1,chani},2)
         endtrunk=0;
-        if periodi==length(cleanPeriods{1,chani})
+        if periodi==size(cleanPeriods{1,chani},2)
             endtrunk=-1;
         end
         goodsamples1(ceil(cleanPeriods{1,chani}(1,periodi)*sampleRate):...
