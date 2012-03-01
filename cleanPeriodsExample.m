@@ -46,6 +46,7 @@ for segi=1:size(cleanPeriods,2)
     !mv temp2 temp1
     fileName='temp1';
     %close all
+    display(['done segment ',num2str(segi)]);
 end
 eval(['!mv temp1 per_',fileNameOrig]);
 p=pdf4D(fileNameOrig);

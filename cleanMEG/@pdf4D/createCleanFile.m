@@ -1499,9 +1499,11 @@ if doHB||doLineF||doXclean
             end
             if doLineF
                 trig=oldData(chit,:);
-                trig = clearBits(trig, lineF);
+                if ~aPieceOnly
+                    trig = clearBits(trig, lineF);
+                end
                 numTrigs=sum(~isnan(trigBits2mask));
-                if numTrigs>0
+                if numTrigs>0 && ~aPieceOnly
                     for trigsi=1:numTrigs
                         trig=clearBits(trig, trigBits2mask(trigsi));
                     end
@@ -1513,6 +1515,9 @@ if doHB||doLineF||doXclean
                 error('MEGanalysis:pdf:fileOperation', ['Did not advance the file ' ferror(fid)])
             end
             if maskTrig
+                if aPieceOnly
+                    warning('masking the trigger in the beginning of the file may cause problems when cleaning LF for the rest of the file')
+                end
                 for bitNo =1:length(trigBits2mask)
                     trig = clearBits(trig, trigBits2mask(bitNo));
                 end
