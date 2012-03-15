@@ -752,8 +752,11 @@ if ~noQuestions
         end
     end
 end
-
-copyfile(inFile, outFile);
+if isunix
+    eval (['!cp ',inFile,' ',outFile]) % there were sometimes permission issues with copyfile
+else
+    copyfile(inFile, outFile); 
+end
 
 %% start the file and get parameters
 disp('Starting the MEG file and adjusting parameters')
