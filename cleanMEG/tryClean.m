@@ -1,5 +1,5 @@
 function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
-    Trig, XTR, xChannels, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal,ECG,HBperiod)
+    Trig, XTR, xChannels, doLineF, doXclean, doHB, chans2ignore, stepDur, hugeVal,ECG,HBperiod,outLierMargin)
 % Try to clean a piece of MEG to see if all can work
 %    [doLineF, doXclean, doHB, figH, QRS, chans2ignore] = tryClean...
 %           (MEG, samplingRate, Trig, XTR, doLineF, doXclean, doHB,...
@@ -33,7 +33,12 @@ function [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate,...
 lf = 50;                  % expected line frequrncy
 Adaptive = lf==lf;        % how to clean the LF
 Global = ~Adaptive;       % how to clean the LF
-outLierMargin = 20;       % channel with values that exceede 20 std are bad
+if ~exist('outLierMargin','var')
+    outLierMargin=[];
+end
+if isempty(outLierMargin)
+    outLierMargin = 20;       % channel with values that exceede 20 std are bad
+end
 minVarAcc = 1e-4;         % XTR must have this variance or more
 maxF = ceil(0.8*samplingRate/2);
 if maxF>=140
@@ -64,7 +69,6 @@ end
 
 % define missing params
 if ~exist('chans2ignore', 'var'), chans2ignore = []; end
-if isempty (chans2ignore), chans2ignore = [74, 204]; end
 if ~exist('doLineF', 'var'), doLineF = []; end
 if isempty (doLineF), doLineF = false; end
 if ~exist('doXclean', 'var'), doXclean = []; end

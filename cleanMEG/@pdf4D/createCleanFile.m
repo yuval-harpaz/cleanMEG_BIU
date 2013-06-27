@@ -159,7 +159,7 @@ if nargin > 2
     okargs = {'outFile', 'byLF', 'byFFT', 'RInclude', 'RiLimit','HeteroCoefs',...
         'DefOverflow', 'CleanPartOnly', 'HeartBeat', 'xClean', 'xBands', ...
         'Method', 'chans2ignore', 'Memory', 'noQuestions', 'maskTrigBits'...
-        'stepCorrect', 'hugeVal','ECG'};
+        'stepCorrect', 'hugeVal','ECG','outLierMargin'};
     %     okargs = lower(okargs);
     for j=1:2:nargin-2
         pname = varargin{j};
@@ -263,6 +263,8 @@ if nargin > 2
                     hugeVal = pval;
                 case 19
                     ECG=pval;
+                case 20
+                    outLierMargin=pval;
             end  % end of switch
         end  % end of tests for unique arg name
     end  % end of testing for even number of argumants
@@ -458,7 +460,7 @@ if exist('tryCleanOP.mat','file')
     load tryCleanOP
 else
     [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR, xChannels,...
-        doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal,ECGT,HBperiod);
+        doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal,ECGT,HBperiod,outLierMargin);
     if aPieceOnly
         save tryCleanOP doLineF doXclean doHB figH QRS
     end

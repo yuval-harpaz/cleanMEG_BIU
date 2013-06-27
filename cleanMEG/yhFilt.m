@@ -1,4 +1,4 @@
-function outData = myFilt(inData,filtObj)
+function outData = yhFilt(inData,filtObj)
 % filter back and forth using the filter object
 %   outData = myFilt(inData,filtObj);
 % inData  - matrix of nChannels X mDataPoints
@@ -12,7 +12,7 @@ function outData = myFilt(inData,filtObj)
 %% initialize
 [rows,columns] = size(inData);
 if rows>columns
-    inData=inData';
+    warning('more rows than columns, transform inData?'); % yuval
 end
 numChannels = size(inData,1);
 % numPoints = size(inData,2);
