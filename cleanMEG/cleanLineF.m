@@ -302,8 +302,8 @@ elseif Adaptive
     end
     if whereUp(end)<length(dataA) % tail after whereUp
         numInTail = length(dataA)-whereUp(end);
-        cleaned(end-numInTail+1:end) = dataA(end-numInTail+1:end)...
-            - ml1(end, end-numInTail+1:end);
+        cleaned(end-numInTail:end) = dataA(end-numInTail:end)...
+            - ml1(end, end-numInTail:end);
     end
     mean1 = ml1(end,:);
 elseif phasePrecession

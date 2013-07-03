@@ -15,7 +15,7 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 %           default)
 % 'byLF'    - either [], or 0, or powerof 2 numeric values.
 %      if the value is: 0 do not clean the Line frequency artefacts
-%           2^n the value of the trigger bit for line f marker 
+%           2^n the value of the trigger bit for line f marker
 %          (e.g. 256  or  [256, 512]) up to 3 bits max.
 %      if []: 'byLF' will search for a bit which is time locked within 1
 %           cycle either to 50 or 60 Hz. (default 'byLF',[])
@@ -28,7 +28,7 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 % 'Method'   - relevant only if cleaning by 'FFT'.  3 possibiliities:
 %      'Global' - use the avergae LF locked cycle averaged over the entire
 %          piece of data [this is the default].
-%    'Adaptive' - Update the average cycle with a time constant of ~173 
+%    'Adaptive' - Update the average cycle with a time constant of ~173
 %          cycles. Start with the average over the first 250 cycles
 %    'phasePrecession' - compute the phase of each trigger mark and use it
 %          (Not recommended unless the interference is very precise in
@@ -41,13 +41,13 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 %                            range, (this is the default)
 %            - array       - list of channel numbers to include
 % 'RiLimit'  - value in [0,1], setting the dynamic range of REF to be
-%              accepted.  (lower values mean be MORE selective). 
+%              accepted.  (lower values mean be MORE selective).
 %              [default 0.85].
 % 'HeteroCoefs' - to use previously prepared coeficients for cleaning
 %              either []  - for computing coeficients with every piece
 %              or coefStruct As obtained by coefsAllByFFT. (default [])
 % 'DefOverflow' - define the value for overflow in MEG (default 1e-11).
-% 'CleanPartOnly' - pair of times [T1,T2] in seconds. leave some parts 
+% 'CleanPartOnly' - pair of times [T1,T2] in seconds. leave some parts
 %              as is and use only the part between T1 and T2.
 % 'HeartBeat' - 0 donot attempt to clean heart beats (this is the default)
 %               [] clean heart beat and find its period from the data
@@ -76,25 +76,25 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 %                   exisiting clean file)
 %                 0 - the default, user input might be reqiured
 %
-% cleanCoefs  - cell Array with coefsAllByFFT for each section 
-%               (containing section definition, PCs for REF and 
+% cleanCoefs  - cell Array with coefsAllByFFT for each section
+%               (containing section definition, PCs for REF and
 %               weights for cleaning as well as the the Heart Beat).
 % 'ECG'       - a vector of ECG like values. real ECG or ica trace of heart component.
-%               intended for peak detection of heartbeat when the mean MEG 
+%               intended for peak detection of heartbeat when the mean MEG
 %               signal is not clear. NOTE that the image of before and
 %               after HB cleaning will show the ECG channel (blue) and the
 %               mean HB after cleaning (red).
 %
-% 
+%
 % NOTE this will work properly only if data in the file is continuous.
 %      Due to memory limitations the file is read and written several
 %      times. Each time the processing is in pieces.  First time the times
 %      and mean waveshape of the Line Frequency is computed.  In the second
-%      run the LF artifacts are cleaned,and the XTR channels are used to 
+%      run the LF artifacts are cleaned,and the XTR channels are used to
 %      clean the data and the position of heart beats is noted
 %      and the mean HB is computed for each channel.
-%      in the third pass the mean HB is subtracted, 
-%      and the file is cleaned by FFT. 
+%      in the third pass the mean HB is subtracted,
+%      and the file is cleaned by FFT.
 
 % Nov-2009  MA  Generated from CreateCleanFile on 15-Nov-2009
 %  Updates
@@ -103,10 +103,10 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 % Oct-2010 XTR channels used to clean acceleration, LF cleaning improved
 % Nov-2010 If heartBeats are too small or irregular they are not cleaned
 % Dec-2010 When huge overflow is found (>1e-8) the data from there on is
-%          converted to 0. problems with high heart rate and big noise on 
+%          converted to 0. problems with high heart rate and big noise on
 %          bad channels -fixed MA
-% Dec-2010 Yossi 
-%          replaced ~ with Tilda 
+% Dec-2010 Yossi
+%          replaced ~ with Tilda
 %          use fileparts() instead of manual strtok & flip
 %          use copyfile() instead of manual strings & commands manipulation
 %          new optional parameter 'noQuestions'
@@ -117,6 +117,10 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 % Jul-2011 varargin 'hugeVal' added.  Cleaning by LF changed to accept up
 %          to 3 bits BUT only the first valid one will be used.
 %          The full out-file name is generated by fullfile. MA
+%
+% Jul-2013 please see changes log by :
+%           cd cleanMEG_BIU
+%           git log --oneline -10
 
 %% Initialize
 % setup some default values
@@ -186,7 +190,7 @@ if nargin > 2
                         RIval={'all','automatic'};
                         L = strncmpi(pval, RIval,length(pname));
                         kk = find(L);
-%                         kk = strmatch(lower(pval), RIval);
+                        %                         kk = strmatch(lower(pval), RIval);
                         if isempty(kk)
                             error('MATLAB:MEGanalysis:BadParameter',...
                                 'Unknown parameter value:  %s.',pval);
@@ -272,10 +276,10 @@ end  % end of more then two input arguments
 
 %% define the missing variables
 if doXclean && ~exist('xBand','var') % define the xBands
-     xBand = [1:139,140:20:800]';
+    xBand = [1:139,140:20:800]';
 end
 if doXclean && isempty(xBand) % define the xBands
-     xBand = [1:139,140:20:800]';
+    xBand = [1:139,140:20:800]';
 end
 QRSstartT = -0.042;  % duration of QRS around peak in HB artifact
 QRSendT   =  0.040;
@@ -284,20 +288,20 @@ amplitudeFudge=0.8;
 if ~exist('chans2ignore', 'var'), chans2ignore=[]; end
 if ~exist('outFile','var'), outFile =[]; end
 if ~exist('RiLimit','var'), RiLimit =[]; end
-if isempty(RiLimit), RiLimit = 0.85; end 
+if isempty(RiLimit), RiLimit = 0.85; end
 if ~exist('overFlowTh', 'var'), overFlowTh=[]; end
 if isempty(overFlowTh), overFlowTh= 1e-9; end
 if ~exist('doFFT','var'), doFFT =[]; end
-if isempty(doFFT) 
+if isempty(doFFT)
     doFFT = false;
 end
 if ~exist('byLF','var'), byLF =[]; end
 if isempty(byLF)
-    doLineF = true; 
+    doLineF = true;
     findLF = true;
 elseif byLF==0
-        findLF = false;
-        doLineF = false;
+    findLF = false;
+    doLineF = false;
 else % not a char - assume a number
     doLineF = true;
     lineF = byLF;
@@ -370,7 +374,7 @@ stepDur = 0.02/hiPass;
 if ~doStep
     stepDur=0;
 end
-    
+
 
 pIn=pdf4D(inFile);
 %% get basic info on the file
@@ -383,14 +387,14 @@ if numEpochs>1
     error ('MATLAB:MEGanalysis:ImproperData',...
         'For now createCleanFileE doesnot work with Epoched data, try createCleanFile.')
     % warning ('MATLAB:pdf4D:notContinuous','epoched data, data "stitched" at bounderies')
-%     epoched = true;
-%     epochStart= nan(1,numEpochs);
-%     lastSample=0;
-%     for ii=1:numEpochs
-%         epochStart(ii) = lastSample+1;
-%         lastSample = lastSample+double(hdr.epoch_data{ii}.pts_in_epoch);
-%     end
-%     epochEnds = [epochStart(2:end)-1, lastSample];
+    %     epoched = true;
+    %     epochStart= nan(1,numEpochs);
+    %     lastSample=0;
+    %     for ii=1:numEpochs
+    %         epochStart(ii) = lastSample+1;
+    %         lastSample = lastSample+double(hdr.epoch_data{ii}.pts_in_epoch);
+    %     end
+    %     epochEnds = [epochStart(2:end)-1, lastSample];
 else
     lastSample = double(hdr.epoch_data{1}.pts_in_epoch);
     epochs = [1,lastSample];
@@ -465,7 +469,7 @@ else
         save tryCleanOP doLineF doXclean doHB figH QRS
     end
 end
-if doLineF 
+if doLineF
     if isempty(trig)
         warning('MATLAB:MEGanalysis:noData','Line Frequency trig not found')
         doLineF = false;
@@ -510,7 +514,7 @@ if doLineF
     
     switch numLFbits
         case 0 % no bits - actualy impossible
-%             doLineF = false;
+            %             doLineF = false;
             error('MATLAB:PDF4d:NonExist',...
                 'Requested LF bit not active. try: ''byLF'',[]')
         case 1 % only one bit - clean by it
@@ -604,26 +608,26 @@ if doLineF
         lineF(2:end)=[];
     end
     %% proceed to clean with lineF bits
-%     initialWhereUp = numLFbits;
-%     remainingLineF = lineF;
-%     possibleWhereUp = cell(1,numLFbits);
-%     for ii = 1:numLFbits
-%       possibleWhereUp{ii}=find(diff(bitand(uint16(trig),uint16(lineF(ii)))));
-%     end
-%     % decide how many to use
-%     useLFbits = false(1,numLFbits);
-%     for ii = 1:numLFbits
-%         if ~isempty(possibleWhereUP{ii})
-%             linePeriod = round(mean(diff(possibleWhereUp{ii})));
-%             if abs(linePeriod -LFinSamples)>2
-%                 warning();
-%             else
-%                 useLFbits(ii) = true;
-%             end
-%         end
-%     end
+    %     initialWhereUp = numLFbits;
+    %     remainingLineF = lineF;
+    %     possibleWhereUp = cell(1,numLFbits);
+    %     for ii = 1:numLFbits
+    %       possibleWhereUp{ii}=find(diff(bitand(uint16(trig),uint16(lineF(ii)))));
+    %     end
+    %     % decide how many to use
+    %     useLFbits = false(1,numLFbits);
+    %     for ii = 1:numLFbits
+    %         if ~isempty(possibleWhereUP{ii})
+    %             linePeriod = round(mean(diff(possibleWhereUp{ii})));
+    %             if abs(linePeriod -LFinSamples)>2
+    %                 warning();
+    %             else
+    %                 useLFbits(ii) = true;
+    %             end
+    %         end
+    %     end
     
-    whereUp = find(diff(bitand(Trig,lineF(1)))>0);  
+    whereUp = find(diff(bitand(Trig,lineF(1)))>0);
     if isempty(whereUp)
         doLineF=false;
         warning ('MEGanalysis:missingParam','Couldnot clean the line artefacts')
@@ -632,7 +636,7 @@ if doLineF
         linePeriod = round(mean(diff(whereUp)));
     end
     if length(lineF)>1  % two trig bits are supplied
-%         whereUp2=find(diff(mod(trig,2*lineF(2)-1)>=lineF(2))==1);
+        %         whereUp2=find(diff(mod(trig,2*lineF(2)-1)>=lineF(2))==1);
         whereUp2=find(diff(bitand(uint16(trig),uint16(lineF(2)))));
         if isempty(whereUp2)
             warning ('MEGanalysis:missingParam',...
@@ -643,7 +647,7 @@ if doLineF
                 useTrig2=true;
                 linePeriod2=round(linePeriod2);
             else
-                useTrig2=false; 
+                useTrig2=false;
                 lineF = lineF(1);
             end
         end
@@ -654,7 +658,7 @@ if doLineF
     df=1/linePeriod;
     whereUpAll = nan(1,ceil(1.2*(lastSample/linePeriod)));
     whereUpNext=1;
-
+    
 end
 
 %% prepare list of MEG channels to ignore
@@ -741,7 +745,7 @@ if isempty(outFile)
     if isempty(R)
         Name = [outFpreFix, '_' S];
     else
-       Name = [outFpreFix, ',' Name];
+        Name = [outFpreFix, ',' Name];
     end
     outFile =  fullfile(Path,Name);
 end
@@ -757,7 +761,7 @@ end
 if isunix
     eval (['!cp ',inFile,' ',outFile]) % there were sometimes permission issues with copyfile
 else
-    copyfile(inFile, outFile); 
+    copyfile(inFile, outFile);
 end
 
 %% start the file and get parameters
@@ -773,16 +777,16 @@ numEpochs = length(hdr.epoch_data);
 if numEpochs>1
     error ('MATLAB:MEGanalysis:ImproperData',...
         'For now createCleanFileE doesnot work with Epoched data, try createCleanFile.')
-%     % error('MATLAB:pdf4D:notContinuous','Cannot clean epoched files')
-%     warning ('MATLAB:pdf4D:notContinuous','epoched data, data "stitched" at bounderies')
-%     epoched = true;
-%     epochStart= nan(1,numEpochs);
-%     lastSample=0;
-%     for ii=1:numEpochs
-%         epochStart(ii) = lastSample+1;
-%         lastSample = lastSample+double(hdr.epoch_data{ii}.pts_in_epoch);
-%     end
-%     epochEnds = [epochStart(2:end)-1, lastSample];
+    %     % error('MATLAB:pdf4D:notContinuous','Cannot clean epoched files')
+    %     warning ('MATLAB:pdf4D:notContinuous','epoched data, data "stitched" at bounderies')
+    %     epoched = true;
+    %     epochStart= nan(1,numEpochs);
+    %     lastSample=0;
+    %     for ii=1:numEpochs
+    %         epochStart(ii) = lastSample+1;
+    %         lastSample = lastSample+double(hdr.epoch_data{ii}.pts_in_epoch);
+    %     end
+    %     epochEnds = [epochStart(2:end)-1, lastSample];
 else
     epoched = false;
     lastSample = double(hdr.epoch_data{1}.pts_in_epoch);
@@ -823,9 +827,9 @@ if ~epoched
         end
     else
         numSamples = round((tEnd-tStrt)*samplingRate);
-%         if tStrt==0;
-%             numSamples=numSamples-1; % not taking sample # 0
-%         end
+        %         if tStrt==0;
+        %             numSamples=numSamples-1; % not taking sample # 0
+        %         end
         numPieces = ceil(numSamples/samplesPerPiece);
         samplesPerPiece= floor(numSamples/numPieces);
         firstS = floor(tStrt*samplingRate);
@@ -869,61 +873,61 @@ if ~doStep
     disp('NOT searching for large step like artifacts')
 else
     disp('reading the entire file and fixing large step like artifacts')
-
-% whereBigSteps = cell(1,numPieces);
-% bigAmplitudes = cell(1,numPieces);
-
-for ii = 1:numPieces
-    startI = startApiece(ii);
-    startT = startI/samplingRate;
-    endI  = stopApiece(ii);
-    % read the MEG
-    MEG = read_data_block(p, [startI,endI], chiSorted);
-    whereBig = nan(1,numGoodChans);
-    bigAmplitude = nan(1,numGoodChans);
-    tBigStep=[];
-    atEnd = false;
-    %search for bigSteps
-    for iii=chans2analyze
-        x = MEG(iii,:);
-        [where, amplitude, atEnd1] = findBigStep(x,samplingRate, [], stepDur, []);
-        if ~isempty(where)
-            atEnd = atEnd||atEnd1;
-            whereBig(iii) = where;
-            bigAmplitude(iii) = amplitude;
-        end
-    end
-    % whereBigSteps{ii} = whereBig;
-    % bigAmplitudes{ii} = bigAmplitudes;
-    if atEnd || sum(~isnan(whereBig))>0  % check if too near the end
-        lastStep = max(whereBig);
-        if (endI-(lastStep+startI)) < stepTail % move the end
-            endI = lastStep+stepTail +startI;
-            stopApiece(ii)= endI;
-            if ii<numPieces % not the last one
-                startApiece(ii+1)=endI;
+    
+    % whereBigSteps = cell(1,numPieces);
+    % bigAmplitudes = cell(1,numPieces);
+    
+    for ii = 1:numPieces
+        startI = startApiece(ii);
+        startT = startI/samplingRate;
+        endI  = stopApiece(ii);
+        % read the MEG
+        MEG = read_data_block(p, [startI,endI], chiSorted);
+        whereBig = nan(1,numGoodChans);
+        bigAmplitude = nan(1,numGoodChans);
+        tBigStep=[];
+        atEnd = false;
+        %search for bigSteps
+        for iii=chans2analyze
+            x = MEG(iii,:);
+            [where, amplitude, atEnd1] = findBigStep(x,samplingRate, [], stepDur, []);
+            if ~isempty(where)
+                atEnd = atEnd||atEnd1;
+                whereBig(iii) = where;
+                bigAmplitude(iii) = amplitude;
             end
         end
-        bigest = find(bigAmplitude==max(bigAmplitude),1);
-        tBigStep = (startI+whereBig(bigest))/samplingRate;
-        warning('MATLAB:MEGanalysis:Artifacts',...
-            'A big step was found at %d',tBigStep);
+        % whereBigSteps{ii} = whereBig;
+        % bigAmplitudes{ii} = bigAmplitudes;
+        if atEnd || sum(~isnan(whereBig))>0  % check if too near the end
+            lastStep = max(whereBig);
+            if (endI-(lastStep+startI)) < stepTail % move the end
+                endI = lastStep+stepTail +startI;
+                stopApiece(ii)= endI;
+                if ii<numPieces % not the last one
+                    startApiece(ii+1)=endI;
+                end
+            end
+            bigest = find(bigAmplitude==max(bigAmplitude),1);
+            tBigStep = (startI+whereBig(bigest))/samplingRate;
+            warning('MATLAB:MEGanalysis:Artifacts',...
+                'A big step was found at %d',tBigStep);
+        end
+        cleanCoefs(ii).bigStep = tBigStep;
+        cleanCoefs(ii).whereBig = whereBig;
+        %  look for huge values and add this channel to the bad ones
+        [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
+        %%%%% BUT do not consider chans2ignore
+        if ~isempty(junkData)
+            chanNo = chans2analyze(chan);
+            ignoreChans(chanNo) = true;
+            warning('MATLAB:MEGanalysis:nonValidData', ...
+                ['MEGanalysis:overflow','Some MEG values are huge at: ',...
+                num2str((startI+junkData)/samplingRate), ' ignoring channel ' num2str(chanNo)]);
+            chans2analyze(chan)=[]; % exclude it
+        end
+        
     end
-    cleanCoefs(ii).bigStep = tBigStep;
-    cleanCoefs(ii).whereBig = whereBig;
-    %  look for huge values and add this channel to the bad ones
-    [chan,junkData] = find(MEG(chans2analyze,:)>hugeVal,1);
-    %%%%% BUT do not consider chans2ignore
-    if ~isempty(junkData)
-        chanNo = chans2analyze(chan);
-        ignoreChans(chanNo) = true;
-        warning('MATLAB:MEGanalysis:nonValidData', ...
-            ['MEGanalysis:overflow','Some MEG values are huge at: ',...
-            num2str((startI+junkData)/samplingRate), ' ignoring channel ' num2str(chanNo)]);
-        chans2analyze(chan)=[]; % exclude it
-    end
-    
-end
 end
 
 %% decide on size of time slice to process
@@ -940,7 +944,7 @@ transitionFactors = repmat(transitionFactors,numMEGchans,1);
 % 1.  If doLF we go over the entire file without writing back anything and
 %     mark the times of LF trig + compute the mean LF cycle over the entire
 %     file.
-% 2.  If doLF subtract the mean LF cycle.  
+% 2.  If doLF subtract the mean LF cycle.
 %     If doXchannel clean by FFT the external channels from the MEG
 %     If doHB find the time of all heart-beats and the mean HB shape. If doLF
 %     write the LF-cleaned and XTR cleaned data back to the file
@@ -980,14 +984,14 @@ end
 
 %% initialize the structure array of HB
 if doHB
-%     for ii = 1:numPieces
-        % HBparams.firstT = startApiece(ii)/samplingRate;
+    %     for ii = 1:numPieces
+    % HBparams.firstT = startApiece(ii)/samplingRate;
     HB(1:numPieces) = HBparams;
-%     end
+    %     end
     minAmplitude=1;
     maxAmplitude=1;
 end
-    
+
 %%  Pass 1 find LF cycles and mean cycle
 if doLineF
     for ii = 1:numPieces
@@ -997,7 +1001,7 @@ if doLineF
         disp(['finding LF for: ' num2str(round([startI,endI]/samplingRate))])
         
         trig = read_data_block(p, [startI,endI], chit);
-%         whereUp=find(diff(mod(trig,2*lineF-1)>=lineF)==1);
+        %         whereUp=find(diff(mod(trig,2*lineF-1)>=lineF)==1);
         whereUp=find(diff(bitand(uint16(trig),uint16(lineF(1)))));
         % read all types of data
         MEG = read_data_block(p, [startI,endI], chiSorted);
@@ -1038,7 +1042,7 @@ if doLineF
                 num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
             chans2analyze(chan)=[]; % exclude it
         end
-       
+        
         if exist('chieSorted','var')
             EEG = read_data_block(p, [startI,endI], chieSorted);
         end
@@ -1158,9 +1162,9 @@ if doHB||doLineF||doXclean
             if exist('chieSorted','var')
                 meanEEG = zeros (numEEGchans,meanL);
             end
-             if exist('chixSorted','var')
-                 meanXTR = zeros (size(chixSorted,2),meanL);
-             end
+            if exist('chixSorted','var')
+                meanXTR = zeros (size(chixSorted,2),meanL);
+            end
         end
     end
     for ii = 1:numPieces
@@ -1178,12 +1182,12 @@ if doHB||doLineF||doXclean
         if ~isempty(junkData)
             chanNo = chans2analyze(chan);
             ignoreChans(chanNo) = true;
-%             endI = startI + size(MEG,2)-1;
+            %             endI = startI + size(MEG,2)-1;
             warning('MATLAB:MEGanalysis:nonValidData', ...
                 ['MEGanalysis:overflow','Some MEG values are huge at: ',...
                 num2str((startI+junkData)/samplingRate), ' ignoring channels ' num2strr(chanNo)]);  % ' - truncated'])
             chans2analyze(chan)=[]; % exclude it
-%             MEG(:,junkData:end)=0;
+            %             MEG(:,junkData:end)=0;
         end
         
         if exist('chieSorted','var')
@@ -1244,8 +1248,8 @@ if doHB||doLineF||doXclean
                 elseif phasePrecession % must be phase precession
                     y = cleanLineF(x, whereUp, epochs, 'phasePrecession');
                 else
-                   error ('MATLAB:MEGanalysis:IllegalParam'...
-                            ,['Allwed METHODs are: ' legalArgs])
+                    error ('MATLAB:MEGanalysis:IllegalParam'...
+                        ,['Allwed METHODs are: ' legalArgs])
                 end
                 MEG(nc,:)=y;
             end
@@ -1274,8 +1278,8 @@ if doHB||doLineF||doXclean
                 elseif phasePrecession % must be phase precession
                     y = cleanLineF(x, whereUp, epochs, 'phasePrecession');
                 else
-                   error ('MATLAB:MEGanalysis:IllegalParam'...
-                            ,['Allwed METHODs are: ' legalArgs])
+                    error ('MATLAB:MEGanalysis:IllegalParam'...
+                        ,['Allwed METHODs are: ' legalArgs])
                 end
                 REF(nc,:)=y;
             end
@@ -1314,8 +1318,8 @@ if doHB||doLineF||doXclean
                         if ii ==1 % first time
                             [y, mean1] = cleanLineF(x, whereUp,...
                                 epochs, 'Adaptive',zeros(meanL,1));
-                        % define the array of means
-                        meanXTR(nc,:) = mean1;
+                            % define the array of means
+                            meanXTR(nc,:) = mean1;
                         else
                             mean1 = meanXTR(nc,:);
                             [y, mean1] = cleanLineF(x, whereUp,...
@@ -1356,10 +1360,10 @@ if doHB||doLineF||doXclean
         %% search for heart beats
         %% HB period
         
-        if doHB 
+        if doHB
             disp(['Finding heart beat for the piece ' num2str(round([startI,endI]/samplingRate))])
             selectChans = selectChansForHB(MEG, samplingRate, chans2ignore);
-%             mMEG = mean(MEG(chans2analyze,:),1);
+            %             mMEG = mean(MEG(chans2analyze,:),1);
             if ~isempty(ECG)
                 mMEG=ECG(1,startI:endI);
             else
@@ -1530,15 +1534,15 @@ if doHB||doLineF||doXclean
             fwrite(fid, oldData, data_format_out);
         end
     end
-
+    
     %% clean the space for next group
     clear MEG REF oldData startI endI trig
-
+    
     if exist('chieSorted','var'),  clear EEG; end
     if exist('chixSorted','var'),  clear XTR; end
     if doLineF, clear trig whereUp; end
     if doHB, clear x; end
-end  % end of treating one piece for LF 
+end  % end of treating one piece for LF
 
 if ~doFFT && ~doHB
     return
@@ -1549,7 +1553,7 @@ if doHB
     maxAmplitude = maxAmplitude/amplitudeFudge;
     % extract the means
     % to avoid inclusion of part of QRS at the end of a cycle we limit the mean
-    % beat length to the mid between and longest sortest Hb cycle over all 
+    % beat length to the mid between and longest sortest Hb cycle over all
     % the data (provided it is not too short)
     % we also find what is the maximal no. of HB per section of data for
     % preparing the Amplitudes arrays
@@ -1577,8 +1581,8 @@ if doHB
         end
     end
     % HBcycle = HBcycleLength;  %round((minHBcycle+maxHBcycle)/2);
-%     iBefore = zTime;
-%     iAfter = HBcycle-zTime-1;
+    %     iBefore = zTime;
+    %     iAfter = HBcycle-zTime-1;
     cycleLength = iBefore+iAfter+1;
     MEGhbCycle = zeros(size(mMEGhb,1),cycleLength);
     REFhbCycle = zeros(size(mREFhb,1),cycleLength);
@@ -1606,7 +1610,7 @@ end
 %% clean HB and by FFT
 for ii = 1:numPieces
     startI = startApiece(ii);
-%     startT = startI/samplingRate;
+    %     startT = startI/samplingRate;
     endI  = stopApiece(ii);
     if doHB&&doFFT
         disp(['cleaning HB and by FFT for the piece ' num2str(round([startI,endI]/samplingRate))])
@@ -1616,7 +1620,7 @@ for ii = 1:numPieces
         disp(['cleaning by FFT for the piece ' num2str(round([startI,endI]/samplingRate))])
     end
     transitions(ii) = endI;
-
+    
     % read all types of data
     MEG = read_data_block(p, [startI,endI], chiSorted);
     % sometimes the last value is HUGE??
@@ -1651,7 +1655,7 @@ for ii = 1:numPieces
         allAmplMEG = zeros(numMEGchans, maxNoHB);
         allAmplREF = zeros(numREFchans, maxNoHB);
         selectChans = selectChansForHB(MEG, samplingRate, chans2ignore);
-%         mMEG = mean(MEG(chans2analyze,:),1);
+        %         mMEG = mean(MEG(chans2analyze,:),1);
         mMEG = mean(MEG(selectChans,:),1);
         whereisHB = findHB01(mMEG, samplingRate,[], 'noPLOT', 'noVERIFY');
         % check for a missing beat at the edges
@@ -1761,7 +1765,7 @@ for ii = 1:numPieces
         end
         HB(ii).REFamplitude = allAmplREF;
     end
-
+    
     if doFFT
         if ~externalCoeficients
             sumOverflow = sum(sum(abs(MEG(chans2analyze,:))>overFlowTh))>0;
@@ -1771,7 +1775,7 @@ for ii = 1:numPieces
                         coefsAllByFFT(MEG(chans2analyze,:),REF,samplingRate,...
                         [],[],overFlowTh);
                 else % cannot overcome the overflow problem
-                    if ispc 
+                    if ispc
                         delete(outFile);
                     elseif isunix
                         command = ['rm' outFile];
@@ -1797,7 +1801,7 @@ for ii = 1:numPieces
         if ii==1 % the start (and end) of ifft may be large values
             upAmplitude = (0:10)/10;
             MEG(:,1:length(upAmplitude)) = MEG(:,1:length(upAmplitude))...
-                     .*repmat(upAmplitude,size(MEG,1),1);
+                .*repmat(upAmplitude,size(MEG,1),1);
         end
         if ii>1  % make a smooth transition between the end of last piece
             % and the begining of the new one
@@ -1810,9 +1814,9 @@ for ii = 1:numPieces
             endOfPiece = MEG(:,end-numTransition+1:end);
             MEG(:,end-numTransition+1:end) = [];
             REF(:,end-numTransition+1:end) = [];
-%             trig(end-numTransition+1:end)=[];
+            %             trig(end-numTransition+1:end)=[];
             transitions(ii) = startI + size(MEG,2)-1;
-            startApiece(ii+1) = transitions(ii)+1;  % Start next piece from 
+            startApiece(ii+1) = transitions(ii)+1;  % Start next piece from
             %                        the beginning of the overlapping piece
             if exist('chieSorted','var')  % EEG exists
                 EEG(:,end-numTransition+1:end) = [];
@@ -1828,8 +1832,8 @@ for ii = 1:numPieces
                 .*repmat(upAmplitude,length(chans2analyze),1);
         end
     end
-
-%% replace the old data by the cleaned data
+    
+    %% replace the old data by the cleaned data
     switch hdr.header_data.data_format
         case SHORT
             data_format = 'int16=>int16';
@@ -1913,20 +1917,20 @@ for ii = 1:numPieces
     if status~=0
         error('MEGanalysis:pdf:fileOperation', ['Did not advance the file ' ferror(fid)])
     end
-%     if maskTrig
-%         for bitNo =1:length(trigBits2mask)
-%             trig = clearBits(trig, trigBits2mask(bitNo));
-%         end
-%     end
+    %     if maskTrig
+    %         for bitNo =1:length(trigBits2mask)
+    %             trig = clearBits(trig, trigBits2mask(bitNo));
+    %         end
+    %     end
     
     fwrite(fid, oldData, data_format_out);
     
     %% clean the space for next group
     clear MEG REF oldData startI endI
-
+    
     if exist('chieSorted','var'),  clear EEG; end
     if exist('chixSorted','var'),  clear XTR; end
-%     if doLineF, clear whereUp; end
+    %     if doLineF, clear whereUp; end
     if doHB
         HBparams = HB(ii);
         cleanCoefs(ii).HBparams = HBparams;
@@ -1975,134 +1979,134 @@ return
 
 %%%%%%%%%%%%%%%%%%   Internal procedures  %%%%%%%%%%%%%%%%%%%%%%%%%%
 function  outFpreFix = buildPrefix(whichF)
-    switch whichF
-        case 1
-            outFpreFix ='hb';
-        case 2
-            outFpreFix ='cf';
-        case 3
-            outFpreFix = 'cf,hb';
-        case 4
-            outFpreFix = 'lf';
-        case 5
-            outFpreFix = 'hb,lf';
-        case 6
-           outFpreFix = 'cf,lf';
-        case 7
-            outFpreFix = 'cf,hb,lf';
-        case 8
-            outFpreFix = 'xc';
-        case 9
-            outFpreFix = 'xc,lf';
-        case 10
-            outFpreFix = 'xc,cf';
-        case 11
-            outFpreFix = 'xc,cf,hb';
-        case 12
-            outFpreFix = 'xc,lf';
-        case 13
-            outFpreFix = 'xc,hb,lf';
-        case 14
-            outFpreFix = 'xc,cf,lf';
-        case 15
-            outFpreFix = 'xc,cf,hb,lf';
-%         case 16
-%             outFpreFix = 'xt';
-%         case 17
-%             outFpreFix = 'xt,hb';
-%         case 18
-%             outFpreFix ='xt,cf';
-%         case 19
-%             outFpreFix = 'xt,cf,hb';
-%         case 20
-%             outFpreFix = 'xt,lf';
-%         case 21
-%             outFpreFix = 'xt,hb,lf';
-%         case 22
-%            outFpreFix = 'xt,cf,lf';
-%         case 23
-%             outFpreFix = 'xt,cf,hb,lf';
-%         case 24
-%             outFpreFix = 'xt,xc';
-%         case 25
-%             outFpreFix = 'xt,xc,lf';
-%         case 26
-%             outFpreFix = 'xt,xc,cf';
-%         case 27
-%             outFpreFix = 'xt,xc,cf,hb';
-%         case 28
-%             outFpreFix = 'xt,xc,lf';
-%         case 29
-%             outFpreFix = 'xt,xc,hb,lf';
-%         case 30
-%             outFpreFix = 'xt,xc,cf,lf';
-%         case 31
-%             outFpreFix = 'xt,xc,cf,hb,lf';
-
-        case 32
-            outFpreFix = 'rs';
-        case 33
-            outFpreFix = 'rs,hb';
-        case 34
-            outFpreFix = 'rs,cf';
-        case 35
-            outFpreFix = 'rs,cf,hb';
-        case 36
-            outFpreFix = 'rs,lf';
-        case 37
-            outFpreFix = 'rs,hb,lf';
-        case 38
-            outFpreFix = 'rs,cf,lf';
-        case 39
-            outFpreFix = 'rs,cf,hb,lf';
-        case 40
-            outFpreFix = 'rs,xc';
-        case 41
-            outFpreFix = 'rs,xc,lf';
-        case 42
-            outFpreFix = 'rs,xc,cf';
-        case 43
-            outFpreFix = 'rs,xc,cf,hb';
-        case 44
-            outFpreFix = 'rs,xc,lf';
-        case 45
-            outFpreFix = 'rs,xc,hb,lf';
-        case 46
-            outFpreFix = 'rs,xc,cf,lf';
-        case 47
-            outFpreFix = 'rs,xc,cf,hb,lf';
-
-%         case 48
-%             outFpreFix = 'rs,xt';
-%         case 49
-%             outFpreFix = 'rs,xt,hb';
-%         case 50
-%             outFpreFix ='rs,xt,cf';
-%         case 51
-%             outFpreFix = 'rs,xt,cf,hb';
-%         case 52
-%             outFpreFix = 'rs,xt,lf';
-%         case 53
-%             outFpreFix = 'rs,xt,hb,lf';
-%         case 54
-%            outFpreFix = 'rs,xt,cf,lf';
-%         case 55
-%             outFpreFix = 'rs,xt,cf,hb,lf';
-%         case 56
-%             outFpreFix = 'rs,xt,xc';
-%         case 57
-%             outFpreFix = 'rs,xt,xc,lf';
-%         case 58
-%             outFpreFix = 'rs,xt,xc,cf';
-%         case 59
-%             outFpreFix = 'rs,xt,xc,cf,hb';
-%         case 60
-%             outFpreFix = 'rs,xt,xc,lf';
-%         case 61
-%             outFpreFix = 'rs,xt,xc,hb,lf';
-%         case 62
-%             outFpreFix = 'rs,xt,xc,cf,lf';
-%         case 63
-%             outFpreFix = 'rs,xt,xc,cf,hb,lf';
-    end
+switch whichF
+    case 1
+        outFpreFix ='hb';
+    case 2
+        outFpreFix ='cf';
+    case 3
+        outFpreFix = 'cf,hb';
+    case 4
+        outFpreFix = 'lf';
+    case 5
+        outFpreFix = 'hb,lf';
+    case 6
+        outFpreFix = 'cf,lf';
+    case 7
+        outFpreFix = 'cf,hb,lf';
+    case 8
+        outFpreFix = 'xc';
+    case 9
+        outFpreFix = 'xc,lf';
+    case 10
+        outFpreFix = 'xc,cf';
+    case 11
+        outFpreFix = 'xc,cf,hb';
+    case 12
+        outFpreFix = 'xc,lf';
+    case 13
+        outFpreFix = 'xc,hb,lf';
+    case 14
+        outFpreFix = 'xc,cf,lf';
+    case 15
+        outFpreFix = 'xc,cf,hb,lf';
+        %         case 16
+        %             outFpreFix = 'xt';
+        %         case 17
+        %             outFpreFix = 'xt,hb';
+        %         case 18
+        %             outFpreFix ='xt,cf';
+        %         case 19
+        %             outFpreFix = 'xt,cf,hb';
+        %         case 20
+        %             outFpreFix = 'xt,lf';
+        %         case 21
+        %             outFpreFix = 'xt,hb,lf';
+        %         case 22
+        %            outFpreFix = 'xt,cf,lf';
+        %         case 23
+        %             outFpreFix = 'xt,cf,hb,lf';
+        %         case 24
+        %             outFpreFix = 'xt,xc';
+        %         case 25
+        %             outFpreFix = 'xt,xc,lf';
+        %         case 26
+        %             outFpreFix = 'xt,xc,cf';
+        %         case 27
+        %             outFpreFix = 'xt,xc,cf,hb';
+        %         case 28
+        %             outFpreFix = 'xt,xc,lf';
+        %         case 29
+        %             outFpreFix = 'xt,xc,hb,lf';
+        %         case 30
+        %             outFpreFix = 'xt,xc,cf,lf';
+        %         case 31
+        %             outFpreFix = 'xt,xc,cf,hb,lf';
+        
+    case 32
+        outFpreFix = 'rs';
+    case 33
+        outFpreFix = 'rs,hb';
+    case 34
+        outFpreFix = 'rs,cf';
+    case 35
+        outFpreFix = 'rs,cf,hb';
+    case 36
+        outFpreFix = 'rs,lf';
+    case 37
+        outFpreFix = 'rs,hb,lf';
+    case 38
+        outFpreFix = 'rs,cf,lf';
+    case 39
+        outFpreFix = 'rs,cf,hb,lf';
+    case 40
+        outFpreFix = 'rs,xc';
+    case 41
+        outFpreFix = 'rs,xc,lf';
+    case 42
+        outFpreFix = 'rs,xc,cf';
+    case 43
+        outFpreFix = 'rs,xc,cf,hb';
+    case 44
+        outFpreFix = 'rs,xc,lf';
+    case 45
+        outFpreFix = 'rs,xc,hb,lf';
+    case 46
+        outFpreFix = 'rs,xc,cf,lf';
+    case 47
+        outFpreFix = 'rs,xc,cf,hb,lf';
+        
+        %         case 48
+        %             outFpreFix = 'rs,xt';
+        %         case 49
+        %             outFpreFix = 'rs,xt,hb';
+        %         case 50
+        %             outFpreFix ='rs,xt,cf';
+        %         case 51
+        %             outFpreFix = 'rs,xt,cf,hb';
+        %         case 52
+        %             outFpreFix = 'rs,xt,lf';
+        %         case 53
+        %             outFpreFix = 'rs,xt,hb,lf';
+        %         case 54
+        %            outFpreFix = 'rs,xt,cf,lf';
+        %         case 55
+        %             outFpreFix = 'rs,xt,cf,hb,lf';
+        %         case 56
+        %             outFpreFix = 'rs,xt,xc';
+        %         case 57
+        %             outFpreFix = 'rs,xt,xc,lf';
+        %         case 58
+        %             outFpreFix = 'rs,xt,xc,cf';
+        %         case 59
+        %             outFpreFix = 'rs,xt,xc,cf,hb';
+        %         case 60
+        %             outFpreFix = 'rs,xt,xc,lf';
+        %         case 61
+        %             outFpreFix = 'rs,xt,xc,hb,lf';
+        %         case 62
+        %             outFpreFix = 'rs,xt,xc,cf,lf';
+        %         case 63
+        %             outFpreFix = 'rs,xt,xc,cf,hb,lf';
+end
 return  % end of buildPreFix
