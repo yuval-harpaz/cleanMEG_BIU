@@ -1,8 +1,26 @@
 function [cleanData,temp2e,period2,ECG,Rtopo]=correctHB(data,sRate,figOptions);%rawData,sRate,ecg)
-% data is a matrix with rows for channels
+% data is a matrix with rows for channels, raw data, not filtered.
 % sRate is sampling rate
 % figs=false;
+% if you want topoplot of HB (first and second sweeps) you have to have:
+% figOptions.label=var4Dlabel;
+% figOptions.layout='4D248.lay';
+% 4D users can run the function from the folder with 'c,*' file with no
+% input arguments:
+% cleanData=correctHB;
+% or like this cleanData=correctHB([],[],1); to get the figures.
+% if you don't specify figure options you still get one before / after figure.
+% added by Dr. Yuval Harpaz to Prof. Abeles' work
 
+% Issues
+%  - no fail warning for data with no HB artifact
+%  - overlap between two heartbeats may have some nosie from summing two
+% templates
+%  - designed for magnetometers, needs adjustment for mag + grad data, like
+%  finding peaks using magnetometers and removing averaged template for
+%  each channel (including grad)
+% 
+% it works, try it!
 
 %% default variables and parameters
 if ~exist('figOptions','var')
