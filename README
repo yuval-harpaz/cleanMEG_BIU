@@ -9,3 +9,11 @@ The code includes pdf4D pack for reading and writing 4D-neuroimaging format data
 to use pdf4D independently see: http://biomag.wikidot.com/msi-matlab
 pdf4D is copyleft (http://www.gnu.org/copyleft/) and GPLv2 (http://www.gnu.org/licenses/old-licenses/gpl-2.0.html).
 Therefore the cleanMEG code is also copyleft and GPLv2.
+
+if you used it please cite 
+Cleaning MEG artifacts using external cues, Tal and Abeles 2013
+http://www.sciencedirect.com/science/article/pii/S0165027013001325
+
+NEW (Dec 2013) !
+try cleaning Heartbeat by correctHB function when createCleanFile fails
+
