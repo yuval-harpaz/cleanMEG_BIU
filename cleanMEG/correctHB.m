@@ -1,4 +1,4 @@
-function [cleanData,temp2e,period2,ECG,Rtopo]=correctHB(data,sRate,figOptions);%rawData,sRate,ecg)
+function [cleanData,temp2e,period2,ECG,Rtopo]=correctHB(data,sRate,figOptions)%rawData,sRate,ecg)
 % data is a matrix with rows for channels, raw data, not filtered.
 % sRate is sampling rate
 % figs=false;
@@ -19,7 +19,7 @@ function [cleanData,temp2e,period2,ECG,Rtopo]=correctHB(data,sRate,figOptions);%
 %  - designed for magnetometers, needs adjustment for mag + grad data, like
 %  finding peaks using magnetometers and removing averaged template for
 %  each channel (including grad)
-% 
+%
 % it works, try it!
 
 %% default variables and parameters
@@ -61,7 +61,7 @@ end
 zThr=20;
 % find bad channels, has to be noisy for 3 of the first 3 seconds
 
-badc=zeros(size(data,1),3); % bad channels
+badc=zeros(size(data,1),1); % bad channels
 stdMEG=std(data(:,1:round(sRate))');
 badc=stdMEG>zThr;
 stdMEG=std(data(:,round(sRate):round(2*sRate))');
@@ -74,30 +74,40 @@ if ~isempty(badc)
 end
 
 % find jump or other huge artifact
+zThr=10;
 meanMEG=mean(data);
-zMEG=(meanMEG-mean(meanMEG))./std(meanMEG);
+meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
+zMEG=(meanMEGdt-mean(meanMEGdt))./std(meanMEGdt);
 jbeg=find(abs((zMEG))>zThr,1);
 bads=[]; % bad samples
 if ~isempty(jbeg)
     jend=find(abs((zMEG))>zThr,1,'last');
-    bads=(jbeg-round(sRate./2)):(jend+round(sRate./2));
-    if length(bads)>sRate*3
-        error(['jump? what''','s the noise at ',num2str(jbeg./sRate),'s ? more then 3sec between first and last noisy point, cant handle this, please clean piece by piece']);
-    else
-        data(:,bads)=0;
-        warning(['jump? what''','s the noise at ',num2str(jbeg./sRate),'s ?']);
-    end
+    jend2=find(abs(zMEG(jend:end))>1,1,'last')+jend-1;
+    bads=(jbeg-round(sRate./2)):(jend2+round(sRate*0.5));
+    %     if length(bads)>sRate*5
+    %         error(['jump? what''','s the noise at ',num2str(jbeg./sRate),'s ? more then 5sec between first and last noisy point, cant handle this, please clean piece by piece']);
+    %     else
+    data(:,bads)=0;
+    data=data-repmat(median(data(:,1:jbeg),2),1,size(data,2));
+    diary('HBlog.txt')
+    warning(['jump? what''','s the noise at ',num2str(jbeg./sRate),'s? zeroed from ',num2str(bads(1)/sRate),' to ',num2str(bads(end)/sRate)]);
+    diary off
+    %    end
+else
+    % baseline correction by removing the median of each channel
+    data=data-repmat(median(data,2),1,size(data,2));
 end
+
 
 
 
 %% filter mean MEG data
 
 
-% baseline correction by removing the median of each channel
-data=data-repmat(median(data,2),1,size(data,2));
+
 % averaging the MEG channels
 meanMEG = mean(data);
+meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 % filtering to pass from 5-7Hz to 100-110Hz
 BandPassSpecObj=fdesign.bandpass(...
     'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
@@ -117,7 +127,7 @@ if figs
     plot(meanMEGf)
     hold on
     plot(Ipeaks, peaks,'ro')
-    title('peak detection on mean MEG trace')
+    title('peak detection on mean MEG trace, OK if most of them are HB')
 end
 %% get topography
 if figs
@@ -135,7 +145,7 @@ if figs
         figure;
         ft_topoplotER(cfg,topo);
     else
-        warning('no topoplot without labels and layout fields!')
+        warning('no topoplot without labels and layout fields! see figOptions options')
     end
 end
 
@@ -147,7 +157,7 @@ topoTraceN=topoTrace./max(topoTrace(1:round(sRate*10)));
 meanMEGN=meanMEGf./max(meanMEGf(1:round(sRate*10)));
 
 %% check if topo of every peak is correlated to average topo
-r=corr(data(:,Ipeaks),topo.avg);
+r=corr(data(:,Ipeaks),median(data(:,Ipeaks),2));
 if figs
     figure;
     plot(topoTraceN)
@@ -187,7 +197,7 @@ if figs
     legend('topoTrace','meanMEG','temp xcorr')
 end
 %% second sweep
-% find peaks on xcorr trace
+%% find peaks on xcorr trace
 [peaks2, Ipeaks2]=findPeaks(xcrPad,1.5,round(sRate*period1*0.6)); % no peaks closer than 60% of period
 if figs
     figure;
@@ -196,28 +206,43 @@ if figs
     plot(Ipeaks2, peaks2,'ro')
     title('2nd sweep peak detection, based on template matching')
 end
-% read unfiltered data
-% cfg=[];
-% cfg.dataset=fileName;
-% cfg.channel='MEG';
-% cfg.demean='yes';
-% data=ft_preprocessing(cfg);
+% checking results
+periodS=diff(Ipeaks2);% the period in samples for each HB
+farI=find(periodS/median(periodS)>1.5);
+if median(periodS)/sRate<0.5 || median(periodS)/sRate>1.5
+    diary('HBlog.txt')
+    warning('interval between HB not resonable, possibly,not enogh HBs detected. look at the figures!')
+    diary off
+else
+    if ~isempty(farI)
+        farT=Ipeaks2(farI)/sRate; % this is far time, not what you think
+        diary('HBlog.txt')
+        disp('sparse heartbeats, you may want to look for missing HB after:');
+        disp(num2str(farT));
+        diary off
+    end
+    nearI=find(periodS/median(periodS)<0.5);
+    
+    if ~isempty(nearI)
+        nearT=Ipeaks2(nearI)/sRate; % this is far time, not what you think
+        diary('HBlog.txt')
+        disp('close heartbeats, you may want to look for false HB detection after:');
+        disp(num2str(nearT));
+        diary off
+    end
+end
+
+% ignore edges
 Ipeaks2in=Ipeaks2(Ipeaks2>sampBefore);
 Ipeaks2in=Ipeaks2in(Ipeaks2in<(size(data,2)-sampBefore));
-%meanMEG=mean(data);
-% if ~isempty(bads)
-%     zMEG=(meanMEG-mean(meanMEG))./std(meanMEG);
-%     jend=find(abs(zMEG)>zThr,1,'last');
-%     bads=(jbeg-round(sRate./2)):(jend+round(sRate./2));
-%     meanMEG(bads)=0;
-% end
+% make ecg trace for meanMEG
 [temp2e,period2]=makeTempHB(meanMEG,sRate,Ipeaks2in,period1,sampBefore,figs);
 % FIXME reject bad SNR HB from averaging
 
-% make ecg trace for meanMEG
 
-% test R amplitude
-meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
+
+%% test R amplitude
+% meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 [~,maxi]=max(temp2e(1:round(length(temp2e/2))));
 bef=find(flipLR(temp2e(1:maxi))<0,1)-1;
 aft=find(temp2e(maxi:end)<0,1)-1;
@@ -227,6 +252,7 @@ Rlims=[maxi-bef,maxi+aft]; % check where R pulls the template above zero
 % mmSm=smooth(meanMEGdt,10);
 % tSm=smooth(temp2e,10);
 % ampMMsm=mmSm(Ipeaks2in)./tSm(maxi);
+
 for HBi=1:length(Ipeaks2in);
     s0=Ipeaks2in(HBi)-bef;
     s1=Ipeaks2in(HBi)+aft;
@@ -249,11 +275,43 @@ ECG=makeECG(temp2e,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
 %% remove ecg from each chan
 
 
-
+%make temp per chan
 sBef=maxi-1;
 sAft=length(temp2e)-maxi;
 HBtemp=HBbyChan(data,sRate,Ipeaks2in,period2,sBef,sAft);
-% FIXME check poor SNG chans on chan temp
+% check SNR per chan
+sm50=round(sRate*0.05);
+s0=maxi-sm50*3;
+s1=maxi-sm50;
+s2=maxi+sm50;
+%HBsnr=HBtemp(:,maxi)./max(abs(HBtemp(:,1:round(sBef/2))),[],2);
+n=std(HBtemp(:,s0:s1)');
+s=std(HBtemp(:,s1:s2)');
+snr=s./n;
+badSNR=find(snr<=2);
+if figs
+    figure;plot(HBtemp','k');hold on;
+    %plot(maxi,HBtemp(find(HBsnr>1.1),maxi),'g.')
+    [~,minI]=min(snr);
+    plot(HBtemp(minI,:),'r');
+    if isempty(badSNR)
+        title('red trace is worst SNR channel')
+    else
+        plot(maxi,HBtemp(badSNR,maxi),'r.')
+        title('red dots mark channels with SNR < 2')
+    end
+end
+
+if ~isempty(badSNR)
+    if length(find(snr<=2))>size(data,1)/2
+        error('too many channels have poor SNR')
+    end
+    HBtemp(badSNR,:)=0;
+    diary('HBlog.txt')
+    disp(['not including bad SNR channels, index no. ',num2str(badSNR)])
+    diary off
+end
+% FIXME check poor SNR chans on chan temp
 ECGall=makeECGbyCh(HBtemp,Rlims,Ipeaks2in,ampMMfit,length(meanMEG),maxi);
 
 cleanData=data-ECGall;
@@ -287,7 +345,8 @@ HBxc=xcorr(HB);
 % FIXME admit defeat for yoni
 [~,ipxc]=findPeaks(HBxc,1.5,sRate*period*0.6); % index peak xcorr
 if length(ipxc)>1
-    period2=(ipxc(length(ipxc)/2+0.5)-ipxc(length(ipxc)/2-0.5))/sRate;
+    nextPeak=ceil(length(ipxc)/2+0.5);
+    period2=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
 else
     HBxc1=xcorr(trace,HB);
     [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
@@ -329,17 +388,19 @@ end
 function tempe=HBbyChan(trace,sRate,peakIndex,period,sampBefore,sampAfter)
 betweenHBs=0.7; % after the T wave, before next qrs, 0.7 of period
 HB=zeros(size(trace,1),sampBefore+1+sampAfter);
+% average HBs
 for epochi=1:length(peakIndex)
     HB=HB+trace(:,peakIndex(epochi)-sampBefore:peakIndex(epochi)+sampAfter);
 end
 HB=HB/epochi;
+% reduce edges to vero
 edgeRepressor=ones(1,size(HB,2));
 ms20=round(sRate/50);
 reducVec=[0:1/ms20:1];
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
 edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
-tempe=HB-median(HB([1:ms20,end-ms20:end]));
+tempe=HB-repmat(mean(HB(:,[1:ms20,end-ms20:end]),2),1,size(HB,2));
 tempe=tempe.*repmat(edgeRepressor,size(HB,1),1);
 function ECG=makeECGbyCh(temp,Rlims,Ipeaks,amp,lengt,maxTemp)
 ECG=zeros(size(temp,1),lengt);

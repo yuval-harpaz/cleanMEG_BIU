@@ -1,0 +1,260 @@
+<div><div style="margin:0px 0px 0.5em;padding-top:0.5em;font-size:29px;border-bottom-width:1px;border-bottom-style:solid;border-bottom-color:rgb(102,102,102);font-family:Georgia,'Times New Roman',times,serif;color:rgb(4,4,80)">
+MSI &gt;&gt; MATLAB</div><div style="font-family:verdana,arial,helvetica,sans-serif;font-size:13px"><a href="http://biomag.wikidot.com/start" style="color:rgb(3,3,144)" target="_blank">Welcome to the BioMag Wiki and Forum</a>&nbsp;»&nbsp;<a href="http://biomag.wikidot.com/communityprojects" style="color:rgb(3,3,144)" target="_blank">Community Projects</a>&nbsp;» MSI &gt;&gt; MATLAB</div>
+<div style="font-family:verdana,arial,helvetica,sans-serif;font-size:13px"><p>MSI to MATLAB conversion does not have to be a pain, it could be fun :)<br>First, one would create pdf object:</p><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;pdf = pdf4D(&lt;filename&gt;);</code>
+</pre></div><br>where&nbsp;<em>&lt;filename&gt;</em>&nbsp;is full path to the pdf (processed data file).<p>To get pdf header information all you have to do is</p><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;hdr = get(pdf, 'header');</code>
+</pre></div><br>or simply<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;hdr = pdf.header;</code>
+</pre></div><br>Since pdf object will also read&nbsp;<em>config</em>&nbsp;and&nbsp;<em>hs_file</em>&nbsp;from the same directory, you could get information from those file in similar way by using&nbsp;<strong>get</strong>&nbsp;or&nbsp;<strong>subsref</strong>&nbsp;methods.<p>
+Some methods of the pdf object:</p><div><div><div><a style="color:rgb(3,3,144)">- get method</a></div><div><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;get(pdf);
+    ver | version : pdf4D object version
+    pdffound | filefound : true | false
+    configfound : true | false
+    hsfound | headshapefound : true | false
+    pdfname | filename : full pdf filename
+    configname : full config filename
+    hsname | headshapename : full headshape filename
+    id | ids : id structure
+    patient | patientid : patient id
+    scan | scanid : scan id
+    session | sessionid : session id
+    run | runid : run id
+    pdf | pdfid : pdf id
+    header : pdf header (structure)
+    config : config info (structure)
+    hs | headeshape : head shape info (structure)
+    hsindex : index points from hs_file (structure)
+    hspoint | hspoints : head shape points from hs_file
+    df | dataformat : data format (string)
+    sp | sampleperiod : sample period [sec]
+    dr | digitizationrate : digitization rate [Hz]
+
+&gt;&gt;hdr = get(pdf, 'header')
+
+hdr = 
+
+     header_data: [1x1 struct]
+      epoch_data: {[1x1 struct]}
+    channel_data: {1x276 cell}
+      event_data: {[1x1 struct]}
+
+&gt;&gt;cnf = get(pdf, 'config')
+
+cnf = 
+
+        config_data: [1x1 struct]
+                Xfm: [4x4 double]
+    user_block_data: {1x14 cell}
+       channel_data: {1x387 cell}
+
+&gt;&gt;hs = get(pdf, 'hs')
+
+hs = 
+
+      hdr: [1x1 struct]
+    index: [1x1 struct]
+    point: [3x2264 double]
+
+&gt;&gt;get(pdf, 'dataformat')
+
+ans =
+
+float</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- subsref method</a></div><div><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;hdr = pdf.header
+
+hdr = 
+
+     header_data: [1x1 struct]
+      epoch_data: {[1x1 struct]}
+    channel_data: {1x248 cell}
+      event_data: {[1x1 struct]}
+
+&gt;&gt;cnf = pdf.config
+
+cnf = 
+
+        config_data: [1x1 struct]
+                Xfm: [4x4 double]
+    user_block_data: {1x14 cell}
+       channel_data: {1x387 cell}
+
+&gt;&gt;hs = pdf.hs
+
+hs = 
+
+      hdr: [1x1 struct]
+    index: [1x1 struct]
+    point: [3x2264 double]</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- set method</a></div><div><p>You could attach&nbsp;<strong>header</strong>,&nbsp;<strong>config</strong>&nbsp;or&nbsp;<strong>hs</strong>&nbsp;<wbr>structures to the pdf object. That would make&nbsp;<strong>get</strong>&nbsp;calls faster.</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;set(pdf, 'header', hdr);
+
+&gt;&gt;set(pdf, 'config', cnf);
+
+&gt;&gt;set(pdf, 'hs', hs);</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- subsasgn method</a></div><div><p>Same as&nbsp;<strong>set</strong>, but different syntax</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;pdf.header = hdr;
+
+&gt;&gt;pdf.config = cnf;
+
+&gt;&gt;pdf.hs = hs;</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- sysconf method</a></div><div><p>If you need information from system config file, you could use&nbsp;<strong>sysconf</strong>&nbsp;method.</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;sys = pdf; % create copy of the pdf object
+
+&gt;&gt;sys.config = sysconf(sys, &lt;filename&gt;); %file name could be absolute name or (if you run MSI) just "DAP name"</code>
+</pre></div><br>After that you could for example get position for the meg channels before transformation (see&nbsp;<strong>channel_position</strong>&nbsp;method)</div></div></div><div><div>
+<div><a style="color:rgb(3,3,144)">- channel_index method</a></div><div><p>You could get channel indexes sorted by channel name or channel label.<br>Channel type could be defined as 'meg', 'eeg' ..</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;chi = channel_index(pdf, 'meg', 'name');
+&gt;&gt;whos chi
+
+  Name      Size                    Bytes  Class
+
+  chi       1x248                     496  uint16 array
+
+Grand total is 248 elements using 496 bytes</code>
+</pre></div><br>or as cell array of names or labels:<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;chi = channel_index(pdf, {'TRIGGER' 'A1'}, 'name');
+&gt;&gt;whos chi
+
+  Name       Size                    Bytes  Class
+
+  chi       1x1                         2  uint16 array
+
+Grand total is 1 element using 2 bytes</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- channel_name method</a></div><div><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;chn = channel_name(pdf, chi);
+&gt;&gt;whos chn
+
+  Name      Size                    Bytes  Class
+
+  chn       1x248                   16648  cell array
+
+Grand total is 1132 elements using 16648 bytes
+
+&gt;&gt;chn(1:10)
+
+ans = 
+
+    'A1'    'A2'    'A3'    'A4'    'A5'    'A6'    'A7'    'A8'    'A9'    'A10'</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- channel_label method</a></div><div><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;chl = channel_label(pdf, chi);
+&gt;&gt;whos chl
+
+  Name      Size                    Bytes  Class
+
+  chn       1x248                   16648  cell array
+
+Grand total is 1132 elements using 16648 bytes
+
+&gt;&gt;chl(1:10)
+
+ans = 
+
+    'A1'    'A2'    'A3'    'A4'    'A5'    'A6'    'A7'    'A8'    'A9'    'A10'</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- channel_type method</a></div><div><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;cht = channel_type(pdf, chi);
+&gt;&gt;whos cht
+
+  Name      Size                    Bytes  Class
+
+  chn       1x248                   16648  cell array
+
+Grand total is 1132 elements using 16648 bytes
+
+&gt;&gt;cht(1)
+
+ans = 
+
+    'meg'</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- channel_position method</a></div><div><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;chp = channel_position(pdf, chi);
+&gt;&gt;whos chp
+
+  Name      Size                    Bytes  Class
+
+  chp       1x248                   53696  struct array
+
+Grand total is 3472 elements using 53696 bytes
+
+&gt;&gt;chp(1)
+
+ans = 
+
+     position: [3x2 double]
+    direction: [3x2 double]
+
+&gt;&gt;chp(1).position
+
+ans =
+
+    0.0373    0.0529
+    0.0042    0.0057
+    0.1506    0.1981
+
+&gt;&gt;chp(1).direction
+
+ans =
+
+    0.3123   -0.3123
+    0.0300   -0.0300
+    0.9495   -0.9495</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- lat2ind method</a></div><div><p>Convert epoch number and latencies into data indexes:</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;lat = lat2ind(pdf, 4, [0 .2])
+
+lat =
+
+   136   271</code>
+</pre></div><br>Second argument is epoch number. Third argument is max and min latency [sec].</div></div></div><div><div><div><a style="color:rgb(3,3,144)">- read_data_block method</a></div>
+<div><p>With channel and latency indexes extracted we ready to read data:</p><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;data = read_data_block(pdf, lat, chi);
+
+&gt;&gt;whos data
+
+  Name       Size                    Bytes  Class
+
+  data     248x136                  134912  single array
+
+Grand total is 33728 elements using 134912 bytes</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- get_posted_data method</a></div><div><p>If you run MSI and MATLAB on the same computer (sorry for Windows users :() you could create pdf object for the posted pdf(s):</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;filename = get_posted_data(pdf4D) 
+
+filename = 
+
+    [1x74 char]
+
+&gt;&gt;filename{1}
+
+ans =
+
+/home/whsbti/data/debian_<wbr>data0/0823/DR_AMtag2/07%14%06@<wbr>13:42/1/c,rfhp0.1Hz
+
+&gt;&gt;pdf = pdf4D(get_posted_data(pdf4D))
+
+ans = 
+
+    Patient: '0823'
+       Scan: 'DR_AMtag2'
+    Session: '07/14/06 13:42'
+        Run: '1'
+        PDF: 'c,rfhp0.1Hz'</code>
+</pre></div></div></div></div><div><div><div><a style="color:rgb(3,3,144)">- write_pdf method</a></div><div><p>If you have not too large piece of data (as result of some sort of processing) you could create new pdf by using write_pdf method:</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt; write_pdf(pdf, data, pdf_id, chan_label, dr, trig)</code>
+</pre></div><br>where<br>data - channel by latency matrix<br>pdf_id - filename for the new pdf (the rest of ids taken from the pdf object)<br>chan_label - cell array of channel names (you could output of the channel_label method)<br>
+dr - digitization rate [Hz]<br>trig - trigger onset [sec]<p>This method creates temporary text file and then calls&nbsp;<strong>asc_to_pdf</strong>&nbsp;program.<br>For the huge data matrices we recommend to use&nbsp;<strong>duplicate</strong>&nbsp;duplicate and&nbsp;<strong>write_data_block</strong>&nbsp;methods.</p>
+</div></div></div><div><div><div><a style="color:rgb(3,3,144)">- duplicate method</a></div><div><p>As the first step to write large piece of data you could duplicate current pdf and the replace data with&nbsp;<strong>write_data_block</strong>&nbsp;method</p>
+<div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto"><pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt; new_pdf = duplicate(pdf, pdf_id);</code>
+</pre></div><br>where<br>pdf_id - filename for the new pdf (the rest of ids taken from the obj)<br>new_pdf - pdf4D object for the new pdf</div></div></div><div><div><div><a style="color:rgb(3,3,144)">- write_data_block method</a></div>
+<div><p>As the second step to write large piece of data you could use&nbsp;<strong>write_data_block</strong>&nbsp;method:</p><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt;write_data_block(pdf, data, lat);</code>
+</pre></div><br>where<br>data - is channel by latency matrix<br>lat - first latency index, default is 1</div></div></div><div><div><div><a style="color:rgb(3,3,144)">- simu method</a></div>
+<div><p>To simulate data for the moving dipole you could use&nbsp;<strong>simu</strong>&nbsp;method:</p><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt; [b, chl] = simu(pdf, r, q, ctr);</code>
+</pre></div><br>where<br>r - 3 by nt (number of time points) array of dipole position [cm]<br>q - 3 by nt array of dipole strength [nAm]<br>ctr - 3 by 1 vector of sphere center [cm]<br>b - nch (number of channels) by nt magnetic field matrix<br>
+chl - cell array of labels for meg channels<p>To get sphere center from&nbsp;<em>hs_file</em>&nbsp;for the current pdf you could use&nbsp;<strong>s_fit</strong>&nbsp;method.</p></div></div></div><div><div>
+<div><a style="color:rgb(3,3,144)">- s_fit method</a></div><div><p>To get sphere center from&nbsp;<em>hs_file</em>&nbsp;for the current pdf you could use&nbsp;<strong>s_fit</strong>&nbsp;method:</p><div style="border:1px dashed rgb(221,221,221);background-color:rgb(247,247,247);font-family:'Andale Mono','Courier New',Courier,monospace;padding:0px 1em;margin:0.4em 0px;overflow:auto">
+<pre style="font-family:'Andale Mono','Courier New',Courier,monospace"><code style="font-family:'Andale Mono','Courier New',Courier,monospace">&gt;&gt; [ctr,r]=s_fit(pdf);</code>
+</pre></div><br>where<br>ctr - 3 by 1 - center of the sphere [cm]<br>r - radius of the sphere [cm]</div></div></div><div><div><div><a style="color:rgb(3,3,144)">- dsel method</a></div>
+<div><p><strong>dsel</strong>&nbsp;(for Data Selector) is graphical interface to MSI data. You could select and sort data using regular expressions and apply you own tools to process selected data.</p><div class="yj6qo ajU"><div id=":uz" class="ajR" role="button" tabindex="0" data-tooltip="Show trimmed content" aria-label="Show trimmed content"><img class="ajT" src="images/cleardot.gif"></div></div><span class="HOEnZb adL"><font color="#888888">
+</font></span></div></div></div></div></div>
