@@ -38,9 +38,15 @@ else
     figs=true;
 end
 minPeriod=0.45;
-maxPeriod=1.5;
+maxPeriod=2; % M sometimes had 1.8s period
 if ~exist('ECG','var')
     ECG=[];
+end
+if ~exist('snrThr','var')
+    snrThr=[];
+end
+if isempty(snrThr)
+    snrThr=1.5;
 end
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
@@ -96,7 +102,7 @@ if ~isempty(badc)
 end
 
 % find jump or other huge artifact
-zThr=10;
+zThr=15;
 %meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 zMEG=(meanMEGf-mean(meanMEGf))./std(meanMEGf);
 jbeg=find(abs((zMEG))>zThr,1);
@@ -123,12 +129,13 @@ end
 
 %% peak detection on MCG (or ECG) signal
 [peaks, Ipeaks]=findPeaks(meanMEGf,1.5,round(sRate*minPeriod)); % 450ms interval minimum
+time=1/sRate:1/sRate:size(data,2)/sRate;
 if figs
     figure;
-    plot(meanMEGf)
+    plot(time,meanMEGf)
     hold on
-    plot(Ipeaks, peaks,'ro')
-    title('peak detection on mean MEG trace, OK if most of them are HB')
+    plot(time(Ipeaks), peaks,'ro')
+    title('peak detection on mean MEG (or ECG) trace, OK if many of them are not HB')
 end
 %% get topography
 if figs
@@ -179,17 +186,17 @@ meanMEGN=meanMEGf./max(meanMEGf(1:round(sRate*10)));
 r=corr(data(:,Ipeaks),median(data(:,Ipeaks),2));
 if figs
     figure;
-    plot(topoTraceN)
+    plot(time,topoTraceN)
     hold on
-    plot(meanMEGN,'r')
-    plot(Ipeaks(r>0.5),r(r>0.5),'g.');
+    plot(time,meanMEGN,'r')
+    plot(time(Ipeaks(r>0.5)),r(r>0.5),'g.');
     legend('topoTrace','meanMEG','r data-topo > 0.5')
 end
 %% average good HB and make a template
 IpeaksR=Ipeaks(r>0.5);
 IpeaksR=IpeaksR(IpeaksR>sampBefore);
 IpeaksR=IpeaksR(IpeaksR<(size(data,2)-sampBefore));
-[temp1e,period1]=makeTempHB(meanMEG,sRate,IpeaksR,minPeriod/0.6,sampBefore,figs);
+[temp1e,period1]=makeTempHB(meanMEG,sRate,IpeaksR,median(diff(IpeaksR))/sRate,sampBefore,figs);
 %% find xcorr between template and meanMEG
 [xcr,lags]=xcorr(meanMEGf,temp1e);
 xcr=xcr(lags>=0);
@@ -198,32 +205,36 @@ xcrPad=zeros(size(meanMEGf));
 xcrPad(tempMax:end)=xcr(1:end-tempMax+1);
 if figs
     figure;
-    plot(topoTraceN)
+    plot(time,topoTraceN)
     hold on
-    plot(meanMEGN,'r')
-    plot(xcrPad/max(xcrPad),'g');
+    plot(time,meanMEGN,'r')
+    plot(time,xcrPad/max(xcrPad),'g');
     legend('topoTrace','meanMEG','temp xcorr')
 end
 %% second sweep
 %% find peaks on xcorr trace
-[peaks2, Ipeaks2]=findPeaks(xcrPad,1.5,round(sRate*period1*0.6)); % no peaks closer than 60% of period
+[peaks2, Ipeaks2]=findPeaks(xcrPad,1.5,round(sRate*period1*0.65)); % no peaks closer than 60% of period
 if figs
     figure;
-    plot(xcrPad)
+    plot(time,xcrPad)
     hold on
-    plot(Ipeaks2, peaks2,'ro')
+    plot(time(Ipeaks2), peaks2,'ro')
     title('2nd sweep peak detection, based on template matching')
 end
 % checking results
 periodS=diff(Ipeaks2);% the period in samples for each HB
 farI=find(periodS/median(periodS)>1.5);
-if median(periodS)/sRate<0.5 || median(periodS)/sRate>1.5
+if median(periodS)/sRate<0.5
     diary('HBlog.txt')
-    warning('interval between HB not resonable, possibly,not enogh HBs detected. look at the figures!')
+    warning('interval between HB is less than 0.5s, look at the figures!')
+    diary off
+elseif median(periodS)/sRate>1.5
+    diary('HBlog.txt')
+    warning('interval between HB is more than 1.5s, look at the figures!')
     diary off
 else
     if ~isempty(farI)
-        farT=Ipeaks2(farI)/sRate; % this is far time, not what you think
+        farT=Ipeaks2(farI)/sRate; % this is far time, not what you think!
         diary('HBlog.txt')
         disp('sparse heartbeats, you may want to look for missing HB after:');
         disp(num2str(farT));
@@ -231,7 +242,7 @@ else
     end
     nearI=find(periodS/median(periodS)<0.5);
     if ~isempty(nearI)
-        nearT=Ipeaks2(nearI)/sRate; % this is far time, not what you think
+        nearT=Ipeaks2(nearI)/sRate;
         diary('HBlog.txt')
         disp('close heartbeats, you may want to look for false HB detection after:');
         disp(num2str(nearT));
@@ -284,15 +295,17 @@ s=std(HBtemp(:,s1:s2)');
 snr=s./n;
 badSNR=find(snr<=snrThr);
 if figs
-    figure;plot(HBtemp','k');hold on;
+    timeTemp=1/sRate:1/sRate:size(HBtemp,2)/sRate;
+    timeTemp=timeTemp-maxi/sRate;
+    figure;plot(timeTemp,HBtemp','k');hold on;
     %plot(maxi,HBtemp(find(HBsnr>1.1),maxi),'g.')
     [~,minI]=min(snr);
-    plot(HBtemp(minI,:),'r');
+    plot(timeTemp,HBtemp(minI,:),'r');
     if isempty(badSNR) || snrThr==0
-        title('red trace is worst SNR channel')
+        title('HB for all channels,red trace is worst SNR channel')
     else
-        plot(maxi,HBtemp(badSNR,maxi),'r.')
-        title(['red dots mark channels with SNR < ',num2str(snrThr)])
+        plot(timeTemp(maxi),HBtemp(badSNR,maxi),'r.')
+        title(['HB for all channels. red trace is worst SNR channel, dots mark channels with SNR < ',num2str(snrThr)])
     end
 end
 if ~isempty(badSNR)
@@ -309,10 +322,10 @@ end
 MCGall=makeMCGbyCh(HBtemp,Rlims,Ipeaks2in,ampMMfit,length(meanMEG),maxi);
 cleanData=data-MCGall;
 figure;
-plot(MCG,'k')
+plot(time,MCG,'k')
 hold on
-plot(meanMEG,'r')
-plot(mean(cleanData),'g')
+plot(time,meanMEG,'r')
+plot(time,mean(cleanData),'g')
 legend('MCG from template', 'mean MEG','mean clean MEG')
 Rtopo=HBtemp(:,maxi);
 if figs
@@ -359,9 +372,11 @@ edgeRepressor(1:length(reducVec))=reducVec;
 edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
 tempe=temp-median(temp);
 tempe=tempe.*edgeRepressor;
+time=1/sRate:1/sRate:length(temp)/sRate;
+time=time-(1-betweenHBs)*period2;
 if figs
     figure;
-    plot(tempe,'g')
+    plot(time,tempe,'g')
     title('template HB')
 end
 tempe=double(tempe);

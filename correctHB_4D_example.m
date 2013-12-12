@@ -13,7 +13,10 @@ eval(['!mv rw_',fn,' hb_',fn])
 
 %% BIU users
 % better clean accelerometers first if you have them 
-% use createCleanFile with 'HeartBeat',0,
+% use createCleanFile with 'HeartBeat',0, like this
+fileName = 'c,rfhp0.1Hz';
+p=pdf4D(fileName);
+cleanCoefs = createCleanFile(p, fileName,'byLF',256 ,'Method','Adaptive','xClean',[4,5,6],'byFFT',0,'HeartBeat',0);
 % then you get a file called 'xc,lf_c,rfhp0.1Hz' or something similar
 % then clean the heartbeat like this
 fn='xc,lf_c,rfhp0.1Hz';
