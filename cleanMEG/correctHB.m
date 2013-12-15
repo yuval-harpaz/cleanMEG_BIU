@@ -68,7 +68,7 @@ if isempty(data);
     var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
     var4Dchi = channel_index(var4Dp, 'meg', 'name');
     data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
-    data=double(data);
+    %data=double(data);
     if figs
         var4Dlabel=channel_label(var4Dp,var4Dchi)';
         figOptions.label=var4Dlabel;
@@ -81,7 +81,7 @@ if ~isempty(ECG)
     meanMEG=ECG;
     %meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 else
-    meanMEG=mean(data);
+    meanMEG=double(mean(data));
 end
 % filtering to pass from 5-7Hz to 100-110Hz
 BandPassSpecObj=fdesign.bandpass(...
@@ -124,10 +124,10 @@ if ~isempty(jbeg)
     % end
 else
     % baseline correction by removing the median of each channel
-    data=data-repmat(median(data,2),1,size(data,2));
+    data=data-repmat(median(data,2),1,size(data,2)); %FIXME RAM consuming
 end
 if isempty(ECG)
-    meanMEG=mean(data);
+    meanMEG=double(mean(data));
     meanMEGf = myFilt(meanMEG,BandPassFilt);
     meanMEGf=meanMEGf-median(meanMEGf);
 end
@@ -307,7 +307,7 @@ end
 %% test R amplitude
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 [~,maxi]=max(temp2e(1:round(length(temp2e/2))));
-bef=find(flipLR(temp2e(1:maxi))<0,1)-1;
+bef=find(fliplr(temp2e(1:maxi))<0,1)-1;
 aft=find(temp2e(maxi:end)<0,1)-1;
 Rlims=[maxi-bef,maxi+aft]; % check where R pulls the template above zero
 for HBi=1:length(Ipeaks2in);
@@ -444,7 +444,7 @@ ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
-edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
+edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
 tempe=temp-median(temp);
 tempe=tempe.*edgeRepressor;
 time=1/sRate:1/sRate:length(temp)/sRate;
@@ -478,7 +478,7 @@ ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
-edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
+edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
 tempe=HB-repmat(mean(HB(:,[1:ms20,end-ms20:end]),2),1,size(HB,2));
 tempe=tempe.*repmat(edgeRepressor,size(HB,1),1);
 function MCG=makeMCGbyCh(temp,Rlims,Ipeaks,amp,lengt,maxTemp)
