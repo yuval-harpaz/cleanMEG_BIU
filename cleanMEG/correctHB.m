@@ -56,7 +56,11 @@ if ~exist('data','var')
 end
 
 if isempty(data);
-    var4DfileName=ls('c,*');% FIXME take xc,lf if there
+    try
+        var4DfileName=ls('xc,lf_c,*');
+    catch
+        var4DfileName=ls('c,*');
+    end
     var4DfileName=var4DfileName(1:end-1);
     var4Dp=pdf4D(var4DfileName);
     sRate=double(get(var4Dp,'dr'));
