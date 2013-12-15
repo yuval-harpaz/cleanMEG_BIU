@@ -55,7 +55,11 @@ if ~exist('data','var')
     sRate=[];
 end
 if isempty(data);
-    var4DfileName=ls('c,*');
+    try
+        var4DfileName=ls('xc,lf_c,*');
+    catch
+        var4DfileName=ls('c,*');
+    end
     var4DfileName=var4DfileName(1:end-1);
     var4Dp=pdf4D(var4DfileName);
     sRate=double(get(var4Dp,'dr'));
@@ -258,7 +262,7 @@ Ipeaks2in=Ipeaks2in(Ipeaks2in<(size(data,2)-sampBefore));
 %% test R amplitude
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 [~,maxi]=max(temp2e(1:round(length(temp2e/2))));
-bef=find(flipLR(temp2e(1:maxi))<0,1)-1;
+bef=find(fliplr(temp2e(1:maxi))<0,1)-1;
 aft=find(temp2e(maxi:end)<0,1)-1;
 Rlims=[maxi-bef,maxi+aft]; % check where R pulls the template above zero
 for HBi=1:length(Ipeaks2in);
@@ -369,7 +373,7 @@ ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
-edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
+edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
 tempe=temp-median(temp);
 tempe=tempe.*edgeRepressor;
 time=1/sRate:1/sRate:length(temp)/sRate;
@@ -403,7 +407,7 @@ ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
-edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
+edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
 tempe=HB-repmat(mean(HB(:,[1:ms20,end-ms20:end]),2),1,size(HB,2));
 tempe=tempe.*repmat(edgeRepressor,size(HB,1),1);
 function MCG=makeMCGbyCh(temp,Rlims,Ipeaks,amp,lengt,maxTemp)
