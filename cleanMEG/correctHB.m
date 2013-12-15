@@ -2,12 +2,12 @@ function [cleanData,temp2e,period2,MCG,Rtopo]=correctHB(data,sRate,figOptions,EC
 
 % data is a matrix with rows for channels, raw data, not filtered.
 % sRate is sampling rate
-%  - figOptions=false;
+% - figOptions=false;
 % if you want fieldtrip topoplot of HB (first and second sweeps) you have to have:
 % figOptions.label=N by 1 cell arraay with channel names of data
 % figOptions.layout='4D248.lay' for 4D users. I recommend
 % 'neuromag306mag.lay' for neuromag users even if data includes also grads.
-%  - ECG can be ECG (useful for ctf users) or a mean of subset of MEG channels where the HB is
+% - ECG can be ECG (useful for ctf users) or a mean of subset of MEG channels where the HB is
 % visible. neuromag users can put there the mean of the magnetometers to
 % clean both magnetometers and gradiometers included in data.
 % - nsrThr is the threshold that tell which channels are cleaned and which
@@ -21,10 +21,10 @@ function [cleanData,temp2e,period2,MCG,Rtopo]=correctHB(data,sRate,figOptions,EC
 % added by Dr. Yuval Harpaz to Prof. Abeles' work
 
 % Issues
-%  - amplitude estimate per HB needs be better tested
-%  - only R amplitude is corrected, may consider to change q s and t waves.
-%  - memory problem, I should fix it to make topo and template based on the
-%  beginning of the data to clean the rest with it as well, piece by piece.
+% - amplitude estimate per HB needs be better tested
+% - only R amplitude is corrected, may consider to change q s and t waves.
+% - memory problem, I should fix it to make topo and template based on the
+% beginning of the data to clean the rest with it as well, piece by piece.
 %
 % it works, try it!
 
@@ -54,12 +54,9 @@ if ~exist('data','var')
     data=[];
     sRate=[];
 end
+
 if isempty(data);
-    try
-        var4DfileName=ls('xc,lf_c,*');
-    catch
-        var4DfileName=ls('c,*');
-    end
+    var4DfileName=ls('c,*');% FIXME take xc,lf if there
     var4DfileName=var4DfileName(1:end-1);
     var4Dp=pdf4D(var4DfileName);
     sRate=double(get(var4Dp,'dr'));
@@ -86,7 +83,7 @@ end
 BandPassSpecObj=fdesign.bandpass(...
     'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
     5,7,90,110,60,1,60,sRate);
-BandPassFilt=design(BandPassSpecObj  ,'butter');
+BandPassFilt=design(BandPassSpecObj ,'butter');
 meanMEGf = myFilt(meanMEG,BandPassFilt);
 % baseline correction again, just in case
 meanMEGf=meanMEGf-median(meanMEGf);
@@ -120,7 +117,7 @@ if ~isempty(jbeg)
     diary('HBlog.txt')
     warning(['jump? what''','s the noise at ',num2str(jbeg./sRate),'s? zeroed from ',num2str(bads(1)/sRate),' to ',num2str(bads(end)/sRate)]);
     diary off
-    %    end
+    % end
 else
     % baseline correction by removing the median of each channel
     data=data-repmat(median(data,2),1,size(data,2));
@@ -133,6 +130,20 @@ end
 
 %% peak detection on MCG (or ECG) signal
 [peaks, Ipeaks]=findPeaks(meanMEGf,1.5,round(sRate*minPeriod)); % 450ms interval minimum
+% test if, by chance, the HB field is mainly negative
+posHB=true;
+if isempty(ECG)
+        [peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,1.5,round(sRate*minPeriod));
+    if median(peaksNeg)/median(peaks)>1.1
+        diary('HBlog.txt')
+        warning('NEGATIVE HB FIELD? if not, average the MEG and give it as ECG');
+        diary off
+        Ipeaks=IpeaksNeg;
+        peaks=-peaksNeg;
+        posHB=false;
+        %meanMEGf=-meanMEGf;
+    end
+end
 time=1/sRate:1/sRate:size(data,2)/sRate;
 if figs
     figure;
@@ -160,13 +171,13 @@ if figs
             figure;
             ft_topoplotER(cfg,topo);
             title('MAGNETOMETERS, TOPOGRAPHY OF R')
-            %         cfg.layout='neuromag306planar.lay';
-            %         grd=topo.avg;
-            %         grd(chi)=0;
-            %         cfg.zlim=[-max(abs(grd)) max(abs(grd))];
-            %          figure;
-            %         ft_topoplotER(cfg,topo);
-            %         title('GRADIOMETERS')
+            % cfg.layout='neuromag306planar.lay';
+            % grd=topo.avg;
+            % grd(chi)=0;
+            % cfg.zlim=[-max(abs(grd)) max(abs(grd))];
+            % figure;
+            % ft_topoplotER(cfg,topo);
+            % title('GRADIOMETERS')
         else
             %cfg.channel={'MEG0111';'MEG0121';'MEG0131';'MEG0141';'MEG0211';'MEG0221';'MEG0231';'MEG0241';'MEG0311';'MEG0321';'MEG0331';'MEG0341';'MEG0411';'MEG0421';'MEG0431';'MEG0441';'MEG0511';'MEG0521';'MEG0531';'MEG0541';'MEG0611';'MEG0621';'MEG0631';'MEG0641';'MEG0711';'MEG0721';'MEG0731';'MEG0741';'MEG0811';'MEG0821';'MEG0911';'MEG0921';'MEG0931';'MEG0941';'MEG1011';'MEG1021';'MEG1031';'MEG1041';'MEG1111';'MEG1121';'MEG1131';'MEG1141';'MEG1211';'MEG1221';'MEG1231';'MEG1241';'MEG1311';'MEG1321';'MEG1331';'MEG1341';'MEG1411';'MEG1421';'MEG1431';'MEG1441';'MEG1511';'MEG1521';'MEG1531';'MEG1541';'MEG1611';'MEG1621';'MEG1631';'MEG1641';'MEG1711';'MEG1721';'MEG1731';'MEG1741';'MEG1811';'MEG1821';'MEG1831';'MEG1841';'MEG1911';'MEG1921';'MEG1931';'MEG1941';'MEG2011';'MEG2021';'MEG2031';'MEG2041';'MEG2111';'MEG2121';'MEG2131';'MEG2141';'MEG2211';'MEG2221';'MEG2231';'MEG2241';'MEG2311';'MEG2321';'MEG2331';'MEG2341';'MEG2411';'MEG2421';'MEG2431';'MEG2441';'MEG2511';'MEG2521';'MEG2531';'MEG2541';'MEG2611';'MEG2621';'MEG2631';'MEG2641'};
             %cfg.interpolation='linear';
@@ -183,8 +194,16 @@ end
 topoTrace=median(data(:,Ipeaks),2)'*data;
 topoTrace=myFilt(topoTrace,BandPassFilt);
 topoTrace=topoTrace-median(topoTrace);
-topoTraceN=topoTrace./max(topoTrace(1:round(sRate*10)));
-meanMEGN=meanMEGf./max(meanMEGf(1:round(sRate*10)));
+if ~posHB
+    meanMEGN=meanMEGf./max(-meanMEGf(1:round(sRate*10)));
+    topoTraceN=-topoTrace./max(topoTrace(1:round(sRate*10)));
+else
+    topoTraceN=topoTrace./max(topoTrace(1:round(sRate*10)));
+    meanMEGN=meanMEGf./max(meanMEGf(1:round(sRate*10)));
+end
+
+
+
 
 %% check if topo of every peak is correlated to average topo
 r=corr(data(:,Ipeaks),median(data(:,Ipeaks),2));
@@ -193,16 +212,24 @@ if figs
     plot(time,topoTraceN)
     hold on
     plot(time,meanMEGN,'r')
-    plot(time(Ipeaks(r>0.5)),r(r>0.5),'g.');
+    plot(time(Ipeaks(r>0.5)),meanMEGN(Ipeaks(r>0.5)),'g.');
     legend('topoTrace','meanMEG','r data-topo > 0.5')
 end
 %% average good HB and make a template
 IpeaksR=Ipeaks(r>0.5);
 IpeaksR=IpeaksR(IpeaksR>sampBefore);
 IpeaksR=IpeaksR(IpeaksR<(size(data,2)-sampBefore));
-[temp1e,period1]=makeTempHB(meanMEG,sRate,IpeaksR,median(diff(IpeaksR))/sRate,sampBefore,figs);
+if posHB
+    [temp1e,period1]=makeTempHB(meanMEG,sRate,IpeaksR,median(diff(IpeaksR))/sRate,sampBefore,figs);
+else
+    [temp1e,period1]=makeTempHB(-meanMEG,sRate,IpeaksR,median(diff(IpeaksR))/sRate,sampBefore,figs);
+end
 %% find xcorr between template and meanMEG
-[xcr,lags]=xcorr(meanMEGf,temp1e);
+if posHB
+    [xcr,lags]=xcorr(meanMEGf,temp1e);
+else
+    [xcr,lags]=xcorr(meanMEGf,-temp1e);
+end
 xcr=xcr(lags>=0);
 [~,tempMax]=max(temp1e);
 xcrPad=zeros(size(meanMEGf));
@@ -212,7 +239,11 @@ if figs
     plot(time,topoTraceN)
     hold on
     plot(time,meanMEGN,'r')
-    plot(time,xcrPad/max(xcrPad),'g');
+    if posHB
+        plot(time,xcrPad/max(xcrPad),'g');
+    else
+        plot(time,-xcrPad/max(xcrPad),'g');
+    end
     legend('topoTrace','meanMEG','temp xcorr')
 end
 %% second sweep
@@ -220,9 +251,15 @@ end
 [peaks2, Ipeaks2]=findPeaks(xcrPad,1.5,round(sRate*period1*0.65)); % no peaks closer than 60% of period
 if figs
     figure;
-    plot(time,xcrPad)
-    hold on
-    plot(time(Ipeaks2), peaks2,'ro')
+    if posHB
+        plot(time,xcrPad)
+        hold on
+        plot(time(Ipeaks2), peaks2,'ro')
+    else
+        plot(time,-xcrPad)
+        hold on
+        plot(time(Ipeaks2), -peaks2,'ro')
+    end
     title('2nd sweep peak detection, based on template matching')
 end
 % checking results
@@ -257,12 +294,16 @@ end
 Ipeaks2in=Ipeaks2(Ipeaks2>sampBefore);
 Ipeaks2in=Ipeaks2in(Ipeaks2in<(size(data,2)-sampBefore));
 % make mcg trace for meanMEG
-[temp2e,period2]=makeTempHB(meanMEG,sRate,Ipeaks2in,period1,sampBefore,figs);
+if posHB
+    [temp2e,period2]=makeTempHB(meanMEG,sRate,Ipeaks2in,period1,sampBefore,figs);
+else
+    [temp2e,period2]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period1,sampBefore,figs);
+end
 
 %% test R amplitude
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 [~,maxi]=max(temp2e(1:round(length(temp2e/2))));
-bef=find(fliplr(temp2e(1:maxi))<0,1)-1;
+bef=find(flipLR(temp2e(1:maxi))<0,1)-1;
 aft=find(temp2e(maxi:end)<0,1)-1;
 Rlims=[maxi-bef,maxi+aft]; % check where R pulls the template above zero
 for HBi=1:length(Ipeaks2in);
@@ -277,12 +318,24 @@ for HBi=1:length(Ipeaks2in);
     pScaled(2)=pScaled(2).*10^-scalef;
     p(HBi,1:2)=pScaled; %#ok<AGROW>
 end
-negp=find(p(:,1)<0);
+if posHB
+    negp=find(p(:,1)<0);
+else
+    negp=find(p(:,1)>0);
+end
 if ~isempty(negp)
     p(negp,1:2)=0;
+    diary('HBlog.txt')
+    warning(['did not get good fit for amplitude test, assume average HB amplitude at ',num2str(Ipeaks2in(negp)/sRate)])
+    diary off
 end
 ampMMfit=p(:,1)+(p(:,2)./temp2e(maxi));
-MCG=makeMCG(temp2e,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
+if posHB
+    MCG=makeMCG(temp2e,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
+else
+    MCG=makeMCG(temp2e,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
+    MCG=-MCG;
+end
 
 %% remove mcg from each chan
 %make temp per chan
@@ -323,14 +376,19 @@ if ~isempty(badSNR)
         diary off
     end
 end
-MCGall=makeMCGbyCh(HBtemp,Rlims,Ipeaks2in,ampMMfit,length(meanMEG),maxi);
+if posHB
+    MCGall=makeMCGbyCh(HBtemp,Rlims,Ipeaks2in,ampMMfit,length(meanMEG),maxi);
+else
+    MCGall=makeMCGbyCh(HBtemp,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG),maxi);
+end
 cleanData=data-MCGall;
 figure;
 plot(time,MCG,'k')
 hold on
-plot(time,meanMEG,'r')
+plot(time,mean(data),'r')
 plot(time,mean(cleanData),'g')
 legend('MCG from template', 'mean MEG','mean clean MEG')
+
 Rtopo=HBtemp(:,maxi);
 if figs
     topo.avg=Rtopo;
@@ -361,7 +419,16 @@ HBxc=xcorr(HB);
 if length(ipxc)>1
     nextPeak=ceil(length(ipxc)/2+0.5);
     period2=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
-else
+% else
+% if length(trace)>=2^20
+% trace1=trace;
+% segi=0;
+% while trace1>=2^20
+% segi=segi+1;
+            % FIXME xcorr (fftfilt) won't take it for more than 2^20
+            
+            
+        
     HBxc1=xcorr(trace,HB);
     [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
     
@@ -373,7 +440,7 @@ ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
-edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
+edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
 tempe=temp-median(temp);
 tempe=tempe.*edgeRepressor;
 time=1/sRate:1/sRate:length(temp)/sRate;
@@ -407,7 +474,7 @@ ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
-edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
+edgeRepressor(end-length(reducVec)+1:end)=flipLR(reducVec);
 tempe=HB-repmat(mean(HB(:,[1:ms20,end-ms20:end]),2),1,size(HB,2));
 tempe=tempe.*repmat(edgeRepressor,size(HB,1),1);
 function MCG=makeMCGbyCh(temp,Rlims,Ipeaks,amp,lengt,maxTemp)
@@ -418,4 +485,3 @@ for HBi=1:length(Ipeaks);
     MCG(:,s0:s1)=temp;
     MCG(:,s0+Rlims(1)-1:s0+Rlims(2)-1)=temp(:,Rlims(1):Rlims(2))*amp(HBi);
 end
-
