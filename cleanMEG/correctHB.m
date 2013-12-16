@@ -1,7 +1,9 @@
 function [cleanData,temp2e,period2,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,snrThr)
 
-% data is a matrix with rows for channels, raw data, not filtered.
-% sRate is sampling rate
+% - data is a matrix with rows for channels, raw data, not filtered. it can
+% also be a filename.mat, directing to data matrix file, or a 4D filename such
+% as 'c1,rfhp0.1Hz'.
+% - sRate is sampling rate
 % - figOptions=false;
 % if you want fieldtrip topoplot of HB (first and second sweeps) you have to have:
 % figOptions.label=N by 1 cell arraay with channel names of data
@@ -21,11 +23,12 @@ function [cleanData,temp2e,period2,MCG,Rtopo]=correctHB(data,sRate,figOptions,EC
 % added by Dr. Yuval Harpaz to Prof. Abeles' work
 
 % Issues
-% - amplitude estimate per HB needs be better tested
+% - amplitude estimate per HB needs be better testing
 % - only R amplitude is corrected, may consider to change q s and t waves.
 % - memory problem, I should fix it to make topo and template based on the
 % beginning of the data to clean the rest with it as well, piece by piece.
-%
+% - allow using a premade template, good for cleaning data in 2 pieces
+% - 
 % it works, try it!
 
 %% default variables and parameters
@@ -54,12 +57,29 @@ if ~exist('data','var')
     data=[];
     sRate=[];
 end
+if ischar(data)
+    if strcmp(data(end-3:end),'.mat') % read matrix from file 'data.mat'
+        data=load(data);
+        dataField=fieldnames(data);
+        eval(['data=data.',dataField{1,1},';']);
+    else % read 4D data from file name specified in 'data'
+        cloc=strfind(data,'c');
+        comaloc=strfind(data,',');
+        if ~isempty(cloc) && ~isempty(comaloc)
+            if comaloc(end)>cloc(1)
+                var4DfileName=data;
+            end
+        end
+    end
+end
 
-if isempty(data);
-    try
-        var4DfileName=ls('xc,lf_c,*');
-    catch
-        var4DfileName=ls('c,*');
+if isempty(data) || exist('var4DfileName','var');
+    if ~exist('var4DfileName','var');
+        try
+            var4DfileName=ls('xc,lf_c,*');
+        catch
+            var4DfileName=ls('c,*');
+        end
     end
     var4DfileName=var4DfileName(1:end-1);
     var4Dp=pdf4D(var4DfileName);
@@ -117,14 +137,27 @@ if ~isempty(jbeg)
     jend2=find(abs(zMEG(jend:end))>1,1,'last')+jend-1;
     bads=(jbeg-round(sRate./2)):(jend2+round(sRate*0.5));
     data(:,bads)=0;
-    data=data-repmat(median(data(:,1:jbeg),2),1,size(data,2));
+    if length(data)<2^19
+        data=data-repmat(median(data(:,1:jbeg),2),1,size(data,2));
+    else
+        for chani=1:size(data,1)
+            data(chani,:)=data(chani,:)-median(data(chani,1:jbeg),2);
+        end
+    end
+    
     diary('HBlog.txt')
     warning(['jump? what''','s the noise at ',num2str(jbeg./sRate),'s? zeroed from ',num2str(bads(1)/sRate),' to ',num2str(bads(end)/sRate)]);
     diary off
     % end
 else
     % baseline correction by removing the median of each channel
-    data=data-repmat(median(data,2),1,size(data,2)); %FIXME RAM consuming
+    if length(data)<2^19
+        data=data-repmat(median(data,2),1,size(data,2));
+    else
+         for chani=1:size(data,1)
+            data(chani,:)=data(chani,:)-median(data(chani,:),2);
+         end
+    end
 end
 if isempty(ECG)
     meanMEG=double(mean(data));
@@ -230,14 +263,14 @@ else
 end
 %% find xcorr between template and meanMEG
 if posHB
-    [xcr,lags]=xcorr(meanMEGf,temp1e);
+    xcrPad=XCORR(meanMEGf,temp1e);
 else
-    [xcr,lags]=xcorr(meanMEGf,-temp1e);
+    xcrPad=XCORR(-meanMEGf,temp1e);
 end
-xcr=xcr(lags>=0);
-[~,tempMax]=max(temp1e);
-xcrPad=zeros(size(meanMEGf));
-xcrPad(tempMax:end)=xcr(1:end-tempMax+1);
+% xcr=xcr(lags>=0);
+%[~,tempMax]=max(temp1e);
+% xcrPad=zeros(size(meanMEGf));
+% xcrPad(tempMax:end)=xcr(1:end-tempMax+1);
 if figs
     figure;
     plot(time,topoTraceN)
@@ -246,7 +279,7 @@ if figs
     if posHB
         plot(time,xcrPad/max(xcrPad),'g');
     else
-        plot(time,-xcrPad/max(xcrPad),'g');
+        plot(time,-xcrPad/max(-xcrPad),'g');
     end
     legend('topoTrace','meanMEG','temp xcorr')
 end
@@ -423,20 +456,39 @@ HBxc=xcorr(HB);
 if length(ipxc)>1
     nextPeak=ceil(length(ipxc)/2+0.5);
     period2=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
-% else
-% if length(trace)>=2^20
-% trace1=trace;
-% segi=0;
-% while trace1>=2^20
-% segi=segi+1;
+    % else
+    xcorrByseg=false;
+    if length(trace)>=2^20 % test if version is later than 1011b
+        ver=version('-release');
+        if ~strcmp(ver,'2011b')
+            if str2num(ver(1:end-1))<=2011
+                xcorrByseg=true;
+            end
+        end
+    end
+    if xcorrByseg
+        trace1=trace;
+        difs=[];
+        while length(trace1)>length(HB)*3%2^20
+            if length(trace1)>2^20
+                trace2=trace1(1:2^20);
+                trace1=trace1(2^20+1:end);
+            else
+                trace2=trace1;
+                trace1=0;
+            end
+            xcCurrent=xcorr(trace2,HB);
+            xcCurrent=xcCurrent(find(xcCurrent,1):end);
+            [~,ipxcCur]=findPeaks(xcCurrent,1.5,sRate*period*0.6);
+            difs=[difs,diff(ipxcCur)]; %#ok<AGROW>
             % FIXME xcorr (fftfilt) won't take it for more than 2^20
-            
-            
-        
-    HBxc1=xcorr(trace,HB);
-    [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
-    
-    period2=median(diff(ipxc))/sRate;
+        end
+        period2=median(difs)/sRate;
+    else
+        HBxc1=xcorr(trace,HB);
+        [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
+        period2=median(diff(ipxc))/sRate;
+    end
 end
 temp=HB(sampBefore-round(sRate*(1-betweenHBs)*period2):sampBefore+round(sRate*betweenHBs*period2));
 edgeRepressor=ones(size(temp));
@@ -489,3 +541,43 @@ for HBi=1:length(Ipeaks);
     MCG(:,s0:s1)=temp;
     MCG(:,s0+Rlims(1)-1:s0+Rlims(2)-1)=temp(:,Rlims(1):Rlims(2))*amp(HBi);
 end
+function [xcr,lags]=XCORR(x,y)
+xcorrByseg=false;
+if length(x)>=2^20 % test if version is later than 1011b
+    ver=version('-release');
+    if ~strcmp(ver,'2011b')
+        if str2num(ver(1:end-1))<=2011
+            xcorrByseg=true;
+        end
+    end
+end
+if xcorrByseg
+    trace1=x;
+    [~,tempMax]=max(y);
+    xcr=[];
+    
+    while length(trace1)>length(y)%2^20
+        if length(trace1)>2^20
+            trace2=trace1(1:2^20);
+            trace1=trace1(2^20+1:end);
+        else
+            trace2=trace1;
+            trace1=0;
+        end
+        xcrPad=zeros(size(trace2));
+        [xcCurrent,lags]=xcorr(trace2,y);
+        xcCurrent=xcCurrent(lags>=0);
+        xcrPad=zeros(size(trace2));
+        xcrPad(tempMax:end)=xcCurrent(1:end-tempMax+1);
+        xcr=[xcr,xcrPad];
+        % FIXME xcorr (fftfilt) won't take it for more than 2^20
+    end
+    
+else
+    [xcr,lags]=xcorr(trace,HB);
+    xcr=xcr(lags>=0);
+    xcrPad=zeros(size(x));
+    xcrPad(tempMax:end)=xcCurrent(1:end-tempMax+1);
+end
+% this is for older than 2011b
+
