@@ -1,8 +1,9 @@
-function rewrite_pdf(newData,labels,source)
+function rewrite_pdf(newData,labels,source,newPref)
 % newData is the data to be written, rows for channels. it can be only
 % EEG, only MEG, both, just few channels, doesn't matter. make sure the
 % labels match the newData (names of channels in a cell array).
 % source is a name of 4D pdf file
+% newPref is the new prefix, 'rw' by default
 PWD=pwd;
 if ~exist('source','var')
     source=[];
@@ -19,7 +20,14 @@ source=[name,ext];
 if ~isempty(pathstr)
     cd (pathstr);
 end
-newFile=['rw_',source];
+if ~exist('newPref','var')
+    newPref='';
+end
+if isempty(newPref)
+    newFile=['rw_',source];
+else
+    newFile=[newPref,'_',source];
+end
 eval(['!cp ',source,' ',newFile])
 pdf=pdf4D(source);
 pdf2=pdf4D(newFile);

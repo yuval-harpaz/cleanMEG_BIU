@@ -59,8 +59,11 @@ if ~exist('data','var')
 end
 if ischar(data)
     if strcmp(data(end-3:end),'.mat') % read matrix from file 'data.mat'
-        data=load(data);
+        PWD=pwd;
+        display(['loading ',PWD,'/',data,]);
+        data=load(['./',data]);
         dataField=fieldnames(data);
+        
         eval(['data=data.',dataField{1,1},';']);
     else % read 4D data from file name specified in 'data'
         cloc=strfind(data,'c');
@@ -80,13 +83,15 @@ if isempty(data) || exist('var4DfileName','var');
         catch
             var4DfileName=ls('c,*');
         end
+        var4DfileName=['./',var4DfileName(1:end-1)];
     end
-    var4DfileName=var4DfileName(1:end-1);
+    
     var4Dp=pdf4D(var4DfileName);
     sRate=double(get(var4Dp,'dr'));
     var4Dhdr = get(var4Dp, 'header');
     var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
     var4Dchi = channel_index(var4Dp, 'meg', 'name');
+    display(['reading ',var4DfileName]);
     data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
     %data=double(data);
     if figs
@@ -347,7 +352,7 @@ for HBi=1:length(Ipeaks2in);
     s0=Ipeaks2in(HBi)-bef;
     s1=Ipeaks2in(HBi)+aft;
     x=temp2e(Rlims(1):Rlims(2));
-    y=meanMEG(s0:s1);
+    y=meanMEGf(s0:s1);
     scalef=-round(log10(max([x,y]))); % scaling factor for polyfit not to complain
     x=x*10^scalef;
     y=y*10^scalef;
