@@ -261,10 +261,14 @@ end
 IpeaksR=Ipeaks(r>0.5);
 IpeaksR=IpeaksR(IpeaksR>sampBefore);
 IpeaksR=IpeaksR(IpeaksR<(size(data,2)-sampBefore));
+perEstimate=diff(IpeaksR)/sRate; % estimate period
+perEstimate=median(perEstimate(perEstimate<2)); % less than 2s
+
+
 if posHB
-    [temp1e,period1]=makeTempHB(meanMEG,sRate,IpeaksR,median(diff(IpeaksR))/sRate,sampBefore,figs);
+    [temp1e,period1]=makeTempHB(meanMEGf,sRate,IpeaksR,perEstimate,sampBefore,figs);
 else
-    [temp1e,period1]=makeTempHB(-meanMEG,sRate,IpeaksR,median(diff(IpeaksR))/sRate,sampBefore,figs);
+    [temp1e,period1]=makeTempHB(-meanMEGf,sRate,IpeaksR,perEstimate,sampBefore,figs);
 end
 %% find xcorr between template and meanMEG
 if posHB
@@ -344,6 +348,12 @@ end
 
 %% test R amplitude
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
+HighPassSpecObj=fdesign.highpass('Fst,Fp,Ast,Ap',1,2,60,1,sRate);%
+HighPassFilt=design(HighPassSpecObj ,'butter');
+meanMEGhp = myFilt(meanMEG,HighPassFilt);
+% baseline correction again, just in case
+meanMEGhp=meanMEGhp-median(meanMEGhp);
+
 [~,maxi]=max(temp2e(1:round(length(temp2e/2))));
 bef=find(fliplr(temp2e(1:maxi))<0,1)-1;
 aft=find(temp2e(maxi:end)<0,1)-1;
@@ -352,7 +362,7 @@ for HBi=1:length(Ipeaks2in);
     s0=Ipeaks2in(HBi)-bef;
     s1=Ipeaks2in(HBi)+aft;
     x=temp2e(Rlims(1):Rlims(2));
-    y=meanMEGf(s0:s1);
+    y=meanMEGhp(s0:s1);
     scalef=-round(log10(max([x,y]))); % scaling factor for polyfit not to complain
     x=x*10^scalef;
     y=y*10^scalef;
@@ -494,6 +504,9 @@ if length(ipxc)>1
         [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
         period2=median(diff(ipxc))/sRate;
     end
+else
+    warning('could not find cross correlation within extended template, guessing period')
+    period2=period;
 end
 temp=HB(sampBefore-round(sRate*(1-betweenHBs)*period2):sampBefore+round(sRate*betweenHBs*period2));
 edgeRepressor=ones(size(temp));
@@ -546,7 +559,7 @@ for HBi=1:length(Ipeaks);
     MCG(:,s0:s1)=temp;
     MCG(:,s0+Rlims(1)-1:s0+Rlims(2)-1)=temp(:,Rlims(1):Rlims(2))*amp(HBi);
 end
-function [xcr,lags]=XCORR(x,y)
+function xcr=XCORR(x,y)
 xcorrByseg=false;
 if length(x)>=2^20 % test if version is later than 1011b
     ver=version('-release');
@@ -556,9 +569,9 @@ if length(x)>=2^20 % test if version is later than 1011b
         end
     end
 end
+[~,tempMax]=max(y);
 if xcorrByseg
     trace1=x;
-    [~,tempMax]=max(y);
     xcr=[];
     
     while length(trace1)>length(y)%2^20
@@ -579,10 +592,11 @@ if xcorrByseg
     end
     
 else
-    [xcr,lags]=xcorr(trace,HB);
+    [xcr,lags]=xcorr(x,y);
     xcr=xcr(lags>=0);
     xcrPad=zeros(size(x));
-    xcrPad(tempMax:end)=xcCurrent(1:end-tempMax+1);
+    xcrPad(tempMax:end)=xcr(1:end-tempMax+1);
+    xcr=xcrPad; % sorry for switching variables
 end
 % this is for older than 2011b
 
