@@ -124,6 +124,7 @@ function cleanCoefs = createCleanFile(~, inFile, varargin)
 
 %% Initialize
 % setup some default values
+
 expectedLineFrequency1=50;  % Hz
 expectedLineFrequency2=60;  % Hz
 hugeVal = 1e-8;       % impossibly large MEG data
@@ -462,6 +463,8 @@ if ~isempty(ECG)
 end
 if exist('tryCleanOP.mat','file')
     load tryCleanOP
+elseif ~doLineF && ~doXclean && ~doHB && doStep
+    disp('not tryCleaning, going straight to jump search')
 else
     [doLineF, doXclean, doHB, figH, QRS] = tryClean(MEG, samplingRate, trig, XTR, xChannels,...
         doLineF, doXclean, doHB, chans2ignore, stepDur,hugeVal,ECGT,HBperiod,outLierMargin);
@@ -483,11 +486,7 @@ if doLineF
         end
     end
 end
-%% temporary patches
-% if doStep
-%     disp('stepCorrect is NOT functioning yet - ignored')
-%     doStep=false;
-% end
+
 
 %% continue preparations
 if doLineF
@@ -722,7 +721,7 @@ if doHB
 end
 
 %% continue checkups
-if ~doLineF && ~doFFT && ~doHB && ~doXclean % && ~External
+if ~doLineF && ~doFFT && ~doHB && ~doXclean && ~doStep% 
     warning('MATLAB:MEGanalysis:notEnoughInputs', 'Nothing to clean - ABORTING!')
     return
 end
