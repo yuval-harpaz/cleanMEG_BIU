@@ -20,7 +20,7 @@ cleanCoefs = createCleanFile(p, fileName,'byLF',256 ,'Method','Adaptive','xClean
 % then you get a file called 'xc,lf_c,rfhp0.1Hz' or something similar
 % then clean the heartbeat like this (it lookx for xc,lf_* file)
 newData=correctHB; % or newData=correctHB([],[],1); if you want lots of plots
-rewrite_pdf(newData); % or rewrite_pdf(cleanData,[],[],'xc,lf,hb') if you want standard BIU naming
+rewrite_pdf(newData); % or rewrite_pdf(newData,[],[],'xc,lf,hb') if you want standard BIU naming
 
 
 
