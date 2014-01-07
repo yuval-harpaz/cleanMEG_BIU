@@ -98,6 +98,24 @@ chans2analyze = find(~ignoreChans);
 if testSteps
     bigStep=false(1,numMEGchans);
     whereBig = nan(1,numMEGchans);
+    for thrTesti=chans2analyze
+        if size(MEG,2)>round(samplingRate)
+            x = MEG(thrTesti,:);
+        else
+            x = MEG(thrTesti,1:round(samplingRate));
+        end
+         [PSD, F] = myPSD (x, samplingRate, 0.25, 'FFT', 'noDC');
+         f1 = find(F>F1,1);
+        f2 = find(F>F2,1);
+        f3 = find(F>F3,1);
+        f4 = find(F>F4,1);
+        mx=max(PSD(f3:f4));
+        mn=median(PSD(f1:f2));
+        ss=mad(PSD(f1:f2));
+        oPSDtest(thrTesti) =(mx-mn)/ss;
+    end
+    oPSDtest=oPSDtest(~isnan(oPSDtest));
+    thrPow=mean(oPSDtest)*10;
     for iii=chans2analyze
         x = MEG(iii,:);
         %% try to see if there is high frequncy noise in this piece
@@ -110,7 +128,7 @@ if testSteps
         mn=median(PSD(f1:f2));
         ss=mad(PSD(f1:f2));
         oPSD =(mx-mn)/ss;
-        if oPSD<10  % reasonable noise
+        if oPSD<thrPow  % reasonable noise
             [where, ~, atEnd] = findBigStep(x,samplingRate,[], stepDur, []);
             if ~isempty(where) && ~atEnd
                 bigStep(iii)=true;
