@@ -1530,6 +1530,11 @@ if doHB||doLineF||doXclean
                     trig = clearBits(trig, trigBits2mask(bitNo));
                 end
             end
+            if lat==1 %% IF added by yuval, Jan 2014 to fix a problem detected on DC data
+                edge=oldData(:,end);
+            else
+                oldData(:,1)=edge;
+            end
             fwrite(fid, oldData, data_format_out);
         end
     end
