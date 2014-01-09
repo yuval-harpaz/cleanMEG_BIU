@@ -260,6 +260,7 @@ if isempty(ECG)
         period1=median(diff(IpeaksNeg))./sRate;
         if period1<2
             [peaks, Ipeaks]=findPeaks(-meanMEGf,peakZthr,round(sRate*period1*0.6));
+            peaks=-peaks;
         else
             Ipeaks=IpeaksNeg;
             peaks=-peaksNeg;
