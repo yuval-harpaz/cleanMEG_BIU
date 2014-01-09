@@ -1,4 +1,4 @@
-function [cleanData,temp2e,period2,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
+function [cleanData,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 
 % - data is a matrix with rows for channels, raw data, not filtered. it can
 % also be a filename.mat, directing to data matrix file, or a 4D filename such
@@ -51,9 +51,12 @@ function [cleanData,temp2e,period2,MCG,Rtopo]=correctHB(data,sRate,figOptions,EC
 %  - cfg.peakFiltFreq ([7 90]) is the band-pass filter used for the meanMEG data, before peak
 % detection.
 %  - cfg.ampFiltFreq (2) is a high-pass or band-pass filter used to test R
-% peak amplitude. better use highpass only, althoough bp may improve linear
-% fit between (unfiltered) template and filtered data
-%  - cfg.tempFiltFreq ()
+% peak amplitude. better use highpass only, although bp may improve linear
+% fit between (unfiltered) template and filtered data. 
+%  - cfg.tempFiltFreq (same as peakFiltFreq) is the filter used for
+%  meanMEG template and meanMEG before template match takes place. when
+%  T is large and R is small you may want to lower the highpass freq. It
+%  can save the day but beware, tricky business.
 %  - cfg.matchMethod can be 'xcorr' (default) or 'Abeles', it is how you find
 % the match between a template HB and meanMEG / ECG
 
@@ -158,13 +161,24 @@ if isempty(data) || exist('var4DfileName','var');
     end
     clear var4D*
 end
-%% filter mean MEG (or ECG) data
+
 if ~isempty(ECG)
     meanMEG=ECG;
     %meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 else
     meanMEG=double(mean(data));
 end
+%% pad with zeros for templite slide
+sampBefore=round(sRate*maxPeriod);
+%time=1/sRate:1/sRate:size(data,2)/sRate;
+time=-sampBefore/sRate:1/sRate:(size(data,2)+sampBefore)/sRate;
+time=time(2:end);
+origDataSize=size(data);
+meanMEG=[zeros(1,sampBefore),meanMEG,zeros(1,sampBefore)];
+data=[zeros(size(data,1),sampBefore),data,zeros(size(data,1),sampBefore)];
+
+realDataSamp=[sampBefore+1,size(data,2)-sampBefore];
+%% filter mean MEG (or ECG) data
 % filtering to pass from 5-7Hz to 90-110Hz
 if ~(peakFiltFreq(1)>1)
     Fst1=0.0001;
@@ -178,7 +192,7 @@ BandPassFilt=design(BandPassSpecObj ,'butter');
 meanMEGf = myFilt(meanMEG,BandPassFilt);
 % baseline correction again, just in case
 meanMEGf=meanMEGf-median(meanMEGf);
-sampBefore=round(sRate*maxPeriod);
+
 %% look for a noisy segment and noisy channels
 % find bad channels, has to be noisy for 3 of the first 3 seconds
 stdMEG=std(data(:,1:round(sRate))');
@@ -214,9 +228,8 @@ if ~isempty(jbeg)
             data(chani,:)=data(chani,:)-median(data(chani,1:jbeg),2);
         end
     end
-    
     diary('HBlog.txt')
-    warning(['jump? what''','s the noise at ',num2str(jbeg./sRate),'s? zeroed noise from ',num2str(bads(1)/sRate),' to ',num2str(bads(end)/sRate)]);
+    warning(['jump? what''','s the noise at ',num2str(time(jbeg)),'s? zeroed noise from ',num2str(time(bads(1))),' to ',num2str(time(bads(end)))]);
     diary off
     % end
 else
@@ -234,7 +247,6 @@ if isempty(ECG)
     meanMEGf = myFilt(meanMEG,BandPassFilt);
     meanMEGf=meanMEGf-median(meanMEGf);
 end
-
 %% peak detection on MCG (or ECG) signal
 [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*minPeriod)); % 450ms interval minimum
 % test if, by chance, the HB field is mainly negative
@@ -243,15 +255,24 @@ if isempty(ECG)
         [peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,peakZthr,round(sRate*minPeriod));
     if median(peaksNeg)/median(peaks)>1.1
         diary('HBlog.txt')
-        warning('NEGATIVE HB FIELD? if not, average the MEG and give it as ECG');
+        warning('NEGATIVE HB FIELD? if not, average selected MEG channels and give it as ECG');
         diary off
-        Ipeaks=IpeaksNeg;
-        peaks=-peaksNeg;
+        period1=median(diff(IpeaksNeg))./sRate;
+        if period1<2
+            [peaks, Ipeaks]=findPeaks(-meanMEGf,peakZthr,round(sRate*period1*0.6));
+        else
+            Ipeaks=IpeaksNeg;
+            peaks=-peaksNeg;
+        end
         posHB=false;
         %meanMEGf=-meanMEGf;
+    else
+        period1=median(diff(Ipeaks))./sRate;
+        if period1<2 %#ok<*BDSCI> %try to improve peak detection if peak intervals are reasonable
+            [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*period1*0.6)); % 450ms interval
+        end
     end
 end
-time=1/sRate:1/sRate:size(data,2)/sRate;
 if figs
     figure;
     plot(time,meanMEGf)
@@ -332,8 +353,8 @@ end
 IpeaksR=Ipeaks(r>0.5);
 IpeaksR=IpeaksR(IpeaksR>sampBefore);
 IpeaksR=IpeaksR(IpeaksR<(size(data,2)-sampBefore));
-perEstimate=diff(IpeaksR)/sRate; % estimate period
-perEstimate=median(perEstimate(perEstimate<2)); % less than 2s
+period2=diff(IpeaksR)/sRate; % estimate period
+period2=median(period2(period2<2)); % less than 2s
 
 %LowPassSpecObj=fdesign.lowpass('Fp,Fst,Ap,Ast',45,55,1,60,sRate);
 if tempFiltFreq==peakFiltFreq
@@ -360,9 +381,9 @@ end
 % meanMEGxcrF = myFilt(meanMEG,BandPassFiltXcr);
 meanMEGxcrF=meanMEGxcrF-median(meanMEGxcrF);
 if posHB
-    [temp1e,period1]=makeTempHB(meanMEGxcrF,sRate,IpeaksR,perEstimate,sampBefore,figs,maxPeriod);
+    [temp1e,period3]=makeTempHB(meanMEGxcrF,sRate,IpeaksR,period2,sampBefore,figs,maxPeriod);
 else
-    [temp1e,period1]=makeTempHB(-meanMEGxcrF,sRate,IpeaksR,perEstimate,sampBefore,figs,maxPeriod);
+    [temp1e,period3]=makeTempHB(-meanMEGxcrF,sRate,IpeaksR,period2,sampBefore,figs,maxPeriod);
 end
 %% find xcorr between template and meanMEG
 maxi=round(0.3*length(temp1e))+1; %maxi is where the R peak in the template
@@ -400,7 +421,7 @@ if figs
 end
 %% second sweep
 %% find peaks on xcorr trace
-[peaks2, Ipeaks2]=findPeaks(matchTrace,peakZthr,round(sRate*period1*0.65)); % no peaks closer than 60% of period
+[peaks2, Ipeaks2]=findPeaks(matchTrace,peakZthr,round(sRate*period3*0.65)); % no peaks closer than 60% of period
 if figs
     figure;
     if posHB
@@ -447,9 +468,9 @@ Ipeaks2in=Ipeaks2(Ipeaks2>sampBefore);
 Ipeaks2in=Ipeaks2in(Ipeaks2in<(size(data,2)-sampBefore));
 % make mcg trace for meanMEG
 if posHB
-    [temp2e,period2]=makeTempHB(meanMEG,sRate,Ipeaks2in,period1,sampBefore,figs,maxPeriod);
+    [temp2e,period4]=makeTempHB(meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod);
 else
-    [temp2e,period2]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period1,sampBefore,figs,maxPeriod);
+    [temp2e,period4]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod);
 end
 
 maxi=round(0.3*length(temp2e))+1;
@@ -491,7 +512,7 @@ end
 if ~isempty(negp)
     p(negp,1:2)=0;
     diary('HBlog.txt')
-    warning(['did not get good fit for amplitude test, assume average HB amplitude at ',num2str(Ipeaks2in(negp)/sRate)])
+    warning(['did not get good fit for amplitude test, assume average HB amplitude at ',num2str(time(Ipeaks2in(negp)))])
     diary off
 end
 ampMMfit=p(:,1)+(p(:,2)./temp2e(maxi));
@@ -570,24 +591,25 @@ if figs
         title ('TOPOGRAPHY OF R, 2nd sweep')
     end
 end
-display(['HB period (2nd sweep) is ',num2str(period2),'s']);
+display(['HB period (2nd sweep) is ',num2str(period4),'s']);
 if ~isempty(bads);
     cleanData(:,bads)=badData;
 end
+cleanData=cleanData(:,sampBefore+1:end-sampBefore);
 %% internal functions
-function [tempe,period2]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod)
+function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod)
 betweenHBs=0.7; % after the T wave, before next qrs, 0.7 of period
 HB=zeros(size(trace,1),sampBefore*2+1);
 for epochi=1:length(peakIndex)
     HB=HB+trace(:,peakIndex(epochi)-sampBefore:peakIndex(epochi)+sampBefore);
 end
 HB=HB/epochi;
-period2=[]; %#ok<NASGU>
+period4=[]; %#ok<NASGU>
 HBxc=xcorr(HB);
 [~,ipxc]=findPeaks(HBxc,1.5,sRate*period*0.6); % index peak xcorr
 if length(ipxc)>1
     nextPeak=ceil(length(ipxc)/2+0.5);
-    period2=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
+    period4=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
     % else
     xcorrByseg=false;
     if length(trace)>=2^20 % test if version is later than 1011b
@@ -614,17 +636,17 @@ if length(ipxc)>1
             [~,ipxcCur]=findPeaks(xcCurrent,1.5,sRate*period*0.6);
             difs=[difs,diff(ipxcCur)]; %#ok<AGROW>
         end
-        period2=median(difs(difs/sRate<maxPeriod))/sRate;
+        period4=median(difs(difs/sRate<maxPeriod))/sRate;
     else
         HBxc1=xcorr(trace,HB);
         [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
-        period2=median(diff(ipxc))/sRate;
+        period4=median(diff(ipxc))/sRate;
     end
 else
     warning('could not find cross correlation within extended template, guessing period')
-    period2=period;
+    period4=period;
 end
-temp=HB(sampBefore-round(sRate*(1-betweenHBs)*period2):sampBefore+round(sRate*betweenHBs*period2));
+temp=HB(sampBefore-round(sRate*(1-betweenHBs)*period4):sampBefore+round(sRate*betweenHBs*period4));
 edgeRepressor=ones(size(temp));
 ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
@@ -634,7 +656,7 @@ edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
 tempe=temp-median(temp);
 tempe=tempe.*edgeRepressor;
 time=1/sRate:1/sRate:length(temp)/sRate;
-time=time-(1-betweenHBs)*period2;
+time=time-(1-betweenHBs)*period4;
 if figs
     figure;
     plot(time,tempe,'g')
