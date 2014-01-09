@@ -1921,12 +1921,6 @@ for ii = 1:numPieces
     if status~=0
         error('MEGanalysis:pdf:fileOperation', ['Did not advance the file ' ferror(fid)])
     end
-    %     if maskTrig
-    %         for bitNo =1:length(trigBits2mask)
-    %             trig = clearBits(trig, trigBits2mask(bitNo));
-    %         end
-    %     end
-    
     fwrite(fid, oldData, data_format_out);
     
     %% clean the space for next group
