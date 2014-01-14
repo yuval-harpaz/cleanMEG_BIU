@@ -14,6 +14,23 @@ function [cleanData,whereUp]=LFcleanNoCue(data,sRate,chanLF,method,Lfreq,jobs)
 % 
 % Yuval Harpaz Jan 2014
 
+%% set defaults
+if ~exist ('method','var')
+    method=[];
+end
+if isempty(method)
+    method='ADAPTIVE';
+end
+if ~exist ('chanLF','var')
+    chanLF=[];
+end
+if ~exist('Lfreq','var')
+    Lfreq=[];
+end
+if ~exist('jobs','var')
+    jobs=[];
+end
+
 %% try to load data file and check if 4D-neuroimaging data
 cleanData=[];
 if ~exist('data','var')
@@ -37,6 +54,7 @@ if ischar(data)
         end
     end
 end
+
 if isempty(data) || exist('var4DfileName','var');
     if ~exist('var4DfileName','var');
         try
@@ -50,19 +68,28 @@ if isempty(data) || exist('var4DfileName','var');
     sRate=double(get(var4Dp,'dr'));
     var4Dhdr = get(var4Dp, 'header');
     var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
-    %var4Dchi = channel_index(var4Dp, 'meg', 'name');
+    var4Dchi = channel_index(var4Dp, 'meg', 'name');
     display(['reading ',var4DfileName]);
-    data = read_data_block(var4Dp,[1 var4DnSamp]);%,var4Dchi);
+    data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);%,var4Dchi);
+    if isempty(chanLF)
+        var4Dlabels={'MCxaA','MCyaA','MCzaA','MLxaA','MLyaA','MLzaA','MRxaA','MRyaA','MRzaA'};
+        var4DchiRef = channel_index(var4Dp,var4Dlabels, 'name');
+        var4Dref = read_data_block(var4Dp,[1 var4DnSamp],var4DchiRef);%,var4Dchi);
+        
+        [FourRef,Fref]=fftBasic(var4Dref,round(sRate));
+        if isempty(Lfreq)
+            Lfreq=findLfreq(FourRef,Fref);
+        end
+        if isempty(chanLF)
+            maxChani=findchanLF(FourRef,Fref,Lfreq);
+        end
+        chanLF=var4Dref(maxChani,:);
+        display(['selected ',var4Dlabels{maxChani},' as Line Freq cue'])
+    end
     clear var4D*
 end
-%% set defaults
-if ~exist ('method','var')
-    method=[];
-end
-if isempty(method)
-    method='ADAPTIVE';
-end
-%% find chans with no obvious problems
+
+%% find chans with no obvious problems and compute meanPSD
 display('looking for low information channels to be excluded')
 testSamp=min([round(sRate) size(data,2)]);
 for chani=1:size(data,1)
@@ -73,57 +100,36 @@ for chani=1:size(data,1)
 end
 display('filtering and searching for line frequency')
 good=find(good);
-%% test 50Hz or 60Hz
 display('computing fft')
 [Four,F]=fftBasic(data(good,:),round(sRate));
-if ~exist('Lfreq','var')
-    Lfreq=[];
-end
-if isempty(Lfreq)
-    [Four,F]=fftBasic(data(good,:),round(sRate));
+%% test 50Hz or 60Hz
+if isempty(Lfreq);
+    [Lfreq,meanPSD]=findLfreq(Four,F);
+    disp(['line frequency is ',num2str(Lfreq),'Hz'])
+else
     [~, i125] = min(abs(F-125)); % index for 125Hz
     [~, i145] = min(abs(F-145));
     scale=mean(abs(Four(:,i125:i145)),2);
+     FourScaled=zeros(size(Four));
     for chani=1:size(Four,1)
-        Four(chani,:)=abs(Four(chani,:))/scale(chani);
+        FourScaled(chani,:)=abs(Four(chani,:))/scale(chani);
     end
-    meanPSD=mean(Four); % power spectrum, averaged over channels
-    [~, i50] = min(abs(F-50));
-    [~, i60] = min(abs(F-60));
-    
-    snr50=2*meanPSD(i50)/(meanPSD(i50-1)+meanPSD(i50+1));
-    snr60=2*meanPSD(i60)/(meanPSD(i60-1)+meanPSD(i60+1));
-    if meanPSD(i50)>meanPSD(i60) && snr50>snr60
-        Lfreq=50;
-    elseif meanPSD(i60)>meanPSD(i50) && snr60>snr50
-        Lfreq=60;
-    else
-        plot(F,meanPSD)
-        title('Power Spectrum averaged over channels')
-        error('cannot makeup my mind if thhere is 50 or 60 Hz artifact')
-    end
+    meanPSD=mean(FourScaled);
 end
-disp(['line frequency is ',num2str(Lfreq),'Hz'])
-%%
-BPobj=fdesign.bandpass(...
-    'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
-    Lfreq-10,Lfreq-5,Lfreq+5,Lfreq+10,60,1,60,sRate);
-BPfilt=design(BPobj ,'butter');
-%FIXME try cleaning by time intervals
+%% find LF cycles
 
 
 lookForLF=true;
-if ~exist ('chanLF','var')
-    chanLF=[];
-end
-if  isempty(chanLF);
-    [Four,F]=fftBasic(data(good,:),round(sRate));
 
-    [~, i125] = min(abs(F-125)); % index for 125Hz
-    [~, i145] = min(abs(F-145));
-    [~, iLF] = min(abs(F-Lfreq));
-    scale=mean(abs(Four(:,i125:i145)),2);
-    [~,maxChani]=max(abs(Four(:,iLF))./scale); %round(freq)==Lfreq
+if  isempty(chanLF);
+    %[Four,F]=fftBasic(data(good,:),round(sRate));
+    
+    maxChani=findchanLF(Four,F,Lfreq);
+    %     [~, i125] = min(abs(F-125)); % index for 125Hz
+    %     [~, i145] = min(abs(F-145));
+    %     [~, iLF] = min(abs(F-Lfreq));
+    %     scale=mean(abs(Four(:,i125:i145)),2);
+    %     [~,maxChani]=max(abs(Four(:,iLF))./scale); %round(freq)==Lfreq
     chanLF=data(good(maxChani),:);
     display(['selected chan index ',num2str(good(maxChani)),' as Line Freq cue'])
 elseif ischar(chanLF)
@@ -143,6 +149,12 @@ elseif length(chanLF)==1;
     chanLF=data(chanLF,:);
 end
 if lookForLF
+    if ~exist('BPfilt','var')
+        BPobj=fdesign.bandpass(...
+            'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
+            Lfreq-10,Lfreq-5,Lfreq+5,Lfreq+10,60,1,60,sRate);
+        BPfilt=design(BPobj ,'butter');
+    end
     chanLF=myFilt(chanLF,BPfilt);
     chanLFShift=[0,chanLF(1:end-1)];
     logsum=chanLF>0;
@@ -172,24 +184,71 @@ if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
      whereUp=[whereUp,lastInd(2:end)];
 end
 
-dataClean=data;
+%dataClean=data;
 
 %% prepare parallel processing
-if ~exist('jobs')
-    try
-        jobs=matlabpool('size');
-    catch
-        matlabpool close
-        jobs=matlabpool('size');
+closelabs=false;
+nCPU=matlabpool('size'); % 0 if no matlabpool yet;
+if nCPU==0
+    closeLabs=true;
+    if isempty(jobs)
+        try
+            matlabpool;
+            jobs=matlabpool('size');
+        catch
+            jobs=1;
+            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+        end
+    else
+        try
+            matlabpool ('open', jobs);
+        catch
+            jobs=1;
+            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+        end
     end
 else
-    try
-        matlabpool('local',jobs);
-    catch
-        matlabpool close
-        matlabpool('local',jobs);
+    if isempty(jobs)
+        try
+            jobs=matlabpool('size');
+        catch
+            jobs=1;
+            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+        end
+    elseif nCPU~=jobs
+        try
+            matlabpool close
+            %matlabpool('local',jobs);
+            matlabpool ('open', jobs)
+        catch
+            jobs=1;
+            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+        end
     end
 end
+            
+%         
+%         
+%     end
+% end
+% if ~exist('jobs')
+%     try
+%         matlabpool;
+%         jobs=matlabpool('size');
+%     catch
+%         jobs=matlabpool('size');
+%     end
+% else
+%     try
+%         matlabpool('local',jobs);
+%     catch
+%         matlabpool close
+%         matlabpool('local',jobs);
+%     end
+% end
+% if jobs=0
+%     jobs=1;
+% end
 %% cleaning the data
 % estimate time
 tic
@@ -221,54 +280,40 @@ hold on
 plot(F,meanPSDclean,'g')
 legend('original','clean')
 title('PSD after rescaling and averaging channels')
+if closeLabs
+    try
+        matlabpool close
+    end
 end
+function [Lfreq,meanPSD]=findLfreq(fourier,freq)
+% [fourier,freq]=fftBasic(data,round(sRate));
+[~, i125] = min(abs(freq-125)); % index for 125Hz
+[~, i145] = min(abs(freq-145));
+scale=mean(abs(fourier(:,i125:i145)),2);
+for chani=1:size(fourier,1)
+    fourier(chani,:)=abs(fourier(chani,:))/scale(chani);
+end
+meanPSD=mean(fourier); % power spectrum, averaged over channels
+[~, i50] = min(abs(freq-50));
+[~, i60] = min(abs(freq-60));
+
+snr50=2*meanPSD(i50)/(meanPSD(i50-2)+meanPSD(i50+2));
+snr60=2*meanPSD(i60)/(meanPSD(i60-2)+meanPSD(i60+2));
+if meanPSD(i50)>meanPSD(i60) && snr50>2
+    Lfreq=50;
+elseif meanPSD(i60)>meanPSD(i50) && snr60>2
+    Lfreq=60;
+else
+    plot(freq,meanPSD)
+    title('Power Spectrum averaged over channels')
+    error('cannot makeup my mind if thhere is 50 or 60 Hz artifact')
+end
+function maxChani=findchanLF(fourier,freq,Lfreq)
+[~, i125] = min(abs(freq-125)); % index for 125Hz
+[~, i145] = min(abs(freq-145));
+[~, iLF] = min(abs(freq-Lfreq));
+scale=mean(abs(fourier(:,i125:i145)),2);
+[~,maxChani]=max(abs(fourier(:,iLF))./scale); %round(freq)==Lfreq
 
 
 
-
-%see that it is not integer (trigger channel)
-%
-% good=find(good);
-% %[a,b]=max(abs(fourier(noInt,50)))
-% plot(data(7,:))
-%
-% [~,maxChani]=max(abs(fourier(good,50)));
-% good(maxChani)
-%
-% ch14=data(good(maxChani),:);
-% ch14four=[0,fourier(14,:)];
-% ch14FC=zeros(size(ch14four));
-% ch14FC(50)=ch14four(50);
-% ch14art=abs(ifft(ch14FC,678));
-% plot([0,freq],abs(ch14FC))
-%
-% plot(ch14);
-% hold on
-% plot(abs(ch14art),'g')
-% %ifft
-% [PSD, F1] = allSpectra(ch100,samplingRate,0.25,'FFT');
-%
-%
-% plot(ch100);
-%
-% [PSD, F1] = allSpectra(ch100,samplingRate,0.25,'FFT');
-% plot(F1,PSD)
-%
-% plf=pdf4D('lf_c,rfhp1.0Hz');
-% ch100lf=read_data_block(plf,[1 101725],100);
-% PSDlf = allSpectra(ch100lf,samplingRate,0.25,'FFT');
-% hold on
-% plot(F1,PSDlf,'g')
-% nSamp=hdr.epoch_data{1,1}.pts_in_epoch;
-% ch=read_data_block(p,[1 nSamp],100);
-% cycleSamp=round(samplingRate/50)
-% start=double(1):samplingRate/50:double(nSamp);
-% start=round(start);
-% ends=start+cycleSamp;
-% avgCyc=zeros(1,cycleSamp);
-% for cyci=1:length(start)-1;
-%     avgCyc=avgCyc+ch(start(cyci):ends(cyci)-1);
-% end
-% avgCyc=avgCyc/cyci;
-% plot(avgCyc)
-%
