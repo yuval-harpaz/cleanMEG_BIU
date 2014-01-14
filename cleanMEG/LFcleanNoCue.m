@@ -32,7 +32,7 @@ if ~exist('jobs','var')
 end
 
 %% try to load data file and check if 4D-neuroimaging data
-cleanData=[];
+
 if ~exist('data','var')
     data=[];
     sRate=[];
@@ -93,9 +93,9 @@ end
 display('looking for low information channels to be excluded')
 testSamp=min([round(sRate) size(data,2)]);
 for chani=1:size(data,1)
-    good(chani)=true;
+    good(chani)=true; %#ok<AGROW>
     if isequal(data(chani,1:testSamp),int16(data(chani,1:testSamp))) || length(unique(data(chani,1:testSamp)))<20
-        good(chani)=false;
+        good(chani)=false; %#ok<AGROW>
     end
 end
 display('filtering and searching for line frequency')
@@ -134,7 +134,7 @@ if  isempty(chanLF);
     display(['selected chan index ',num2str(good(maxChani)),' as Line Freq cue'])
 elseif ischar(chanLF)
     if strcmp(chanLF,'time')
-        cycleSamp=round(sRate/Lfreq)
+        % cycleSamp=round(sRate/Lfreq)
         start=double(1):sRate/Lfreq:double(size(data,2));
         whereUp=round(start);
         lookForLF=false;
@@ -168,7 +168,7 @@ if ~round(cycInterval)==1000/Lfreq
     error('whereUp has wrong frequency')
 end
     
-badCue=find(diff(whereUp)>1.1*sRate/Lfreq);
+badCue=find(diff(whereUp)>1.1*sRate/Lfreq); %#ok<EFIND>
 if ~isempty(badCue)
     warning('some LF indices are more distant than they should be')
     FIXME fill gaps
@@ -184,10 +184,10 @@ if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
      whereUp=[whereUp,lastInd(2:end)];
 end
 
-%dataClean=data;
+%cleanData=data;
 
 %% prepare parallel processing
-closelabs=false;
+closeLabs=false;
 nCPU=matlabpool('size'); % 0 if no matlabpool yet;
 if nCPU==0
     closeLabs=true;
@@ -226,29 +226,7 @@ else
         end
     end
 end
-            
-%         
-%         
-%     end
-% end
-% if ~exist('jobs')
-%     try
-%         matlabpool;
-%         jobs=matlabpool('size');
-%     catch
-%         jobs=matlabpool('size');
-%     end
-% else
-%     try
-%         matlabpool('local',jobs);
-%     catch
-%         matlabpool close
-%         matlabpool('local',jobs);
-%     end
-% end
-% if jobs=0
-%     jobs=1;
-% end
+
 %% cleaning the data
 % estimate time
 tic
@@ -256,17 +234,17 @@ cleanLineF(data(good(1),:), whereUp, [], upper(method));
 time1st=toc;
 display(['cleaning channels one by one, wait about ',num2str(round(time1st*(length(good)-1)/60/jobs*2)),'min'])
 % do the cleaning
-dataClean=data(good,:);
+cleanData=data(good,:);
 parfor chani=1:length(good)
-    dataClean(chani,:)=cleanLineF(dataClean(chani,:), whereUp, [], upper(method));
+    cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
 end
 
-data(good,:)=dataClean;
-clear dataClean
-dataClean=data;% sorry about this mess, the parfor made me do this
+data(good,:)=cleanData;
+clear cleanData
+cleanData=data;% sorry about this mess, the parfor made me do this
 clear data 
 % display some results
-[Four,F]=fftBasic(dataClean(good,:),round(sRate));
+[Four,F]=fftBasic(cleanData(good,:),round(sRate));
 [~, i125] = min(abs(F-125)); % index for 125Hz
 [~, i145] = min(abs(F-145));
 scale=mean(abs(Four(:,i125:i145)),2);
