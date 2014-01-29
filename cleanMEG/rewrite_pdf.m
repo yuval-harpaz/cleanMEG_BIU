@@ -28,7 +28,11 @@ if isempty(newPref)
 else
     newFile=[newPref,'_',source];
 end
-eval(['!cp ',source,' ',newFile])
+if isunix
+    eval(['!cp ',source,' ',newFile])
+else
+    copyfile(source,newFile)
+end
 pdf=pdf4D(source);
 pdf2=pdf4D(newFile);
 chi = channel_index(pdf, {'meg' 'ref' 'TRIGGER' 'RESPONSE' 'UACurrent' 'eeg' 'EXTERNAL'}, 'name');
