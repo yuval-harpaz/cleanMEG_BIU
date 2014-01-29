@@ -217,15 +217,16 @@ if ~isempty(jbeg)
     for jumpi=1:length(j)
         bads=[bads,j(jumpi)-round(sRate*jPad):j(jumpi)+sRate*jPad]; %#ok<AGROW>
     end
+    %bads(bads<sampBefore+1)=sampBefore+1;
     bads=unique(bads);
     badData=data(:,bads);
     %bads=(jbeg-round(sRate./2)):(jend2+round(sRate*0.5));
     data(:,bads)=0;
     if length(data)<2^19
-        data=data-repmat(median(data(:,1:jbeg),2),1,size(data,2));
+        data=data-repmat(median(data,2),1,size(data,2));
     else
         for chani=1:size(data,1)
-            data(chani,:)=data(chani,:)-median(data(chani,1:jbeg),2);
+            data(chani,:)=data(chani,:)-median(data(chani,:),2);
         end
     end
     diary('HBlog.txt')
@@ -289,19 +290,19 @@ if figs
         topo.time=0;
         topo.label=figOptions.label;
         topo.dimord='chan_time';
-        cfg=[];
-        cfg.layout=figOptions.layout;
+        cfgp=[];
+        cfgp.layout=figOptions.layout;
         if ~isempty(badc)
-            cfg.channel=setdiff(1:length(topo.label),badc);
+            cfgp.channel=setdiff(1:length(topo.label),badc);
         end
-        if strcmp(cfg.layout,'neuromag306mag.lay')
+        if strcmp(cfgp.layout,'neuromag306mag.lay')
             [~,magi]=ismember({'MEG0111';'MEG0121';'MEG0131';'MEG0141';'MEG0211';'MEG0221';'MEG0231';'MEG0241';'MEG0311';'MEG0321';'MEG0331';'MEG0341';'MEG0411';'MEG0421';'MEG0431';'MEG0441';'MEG0511';'MEG0521';'MEG0531';'MEG0541';'MEG0611';'MEG0621';'MEG0631';'MEG0641';'MEG0711';'MEG0721';'MEG0731';'MEG0741';'MEG0811';'MEG0821';'MEG0911';'MEG0921';'MEG0931';'MEG0941';'MEG1011';'MEG1021';'MEG1031';'MEG1041';'MEG1111';'MEG1121';'MEG1131';'MEG1141';'MEG1211';'MEG1221';'MEG1231';'MEG1241';'MEG1311';'MEG1321';'MEG1331';'MEG1341';'MEG1411';'MEG1421';'MEG1431';'MEG1441';'MEG1511';'MEG1521';'MEG1531';'MEG1541';'MEG1611';'MEG1621';'MEG1631';'MEG1641';'MEG1711';'MEG1721';'MEG1731';'MEG1741';'MEG1811';'MEG1821';'MEG1831';'MEG1841';'MEG1911';'MEG1921';'MEG1931';'MEG1941';'MEG2011';'MEG2021';'MEG2031';'MEG2041';'MEG2111';'MEG2121';'MEG2131';'MEG2141';'MEG2211';'MEG2221';'MEG2231';'MEG2241';'MEG2311';'MEG2321';'MEG2331';'MEG2341';'MEG2411';'MEG2421';'MEG2431';'MEG2441';'MEG2511';'MEG2521';'MEG2531';'MEG2541';'MEG2611';'MEG2621';'MEG2631';'MEG2641'},topo.label);
             %topo.avg=topo.avg(chi);
             %topo.label=topo.label(chi);
-            cfg.xlim=[1,1];
-            cfg.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
+            cfgp.xlim=[1,1];
+            cfgp.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
             figure;
-            ft_topoplotER(cfg,topo);
+            ft_topoplotER(cfgp,topo);
             title('MAGNETOMETERS, TOPOGRAPHY OF R')
             % cfg.layout='neuromag306planar.lay';
             % grd=topo.avg;
@@ -313,10 +314,10 @@ if figs
         else
             %cfg.channel={'MEG0111';'MEG0121';'MEG0131';'MEG0141';'MEG0211';'MEG0221';'MEG0231';'MEG0241';'MEG0311';'MEG0321';'MEG0331';'MEG0341';'MEG0411';'MEG0421';'MEG0431';'MEG0441';'MEG0511';'MEG0521';'MEG0531';'MEG0541';'MEG0611';'MEG0621';'MEG0631';'MEG0641';'MEG0711';'MEG0721';'MEG0731';'MEG0741';'MEG0811';'MEG0821';'MEG0911';'MEG0921';'MEG0931';'MEG0941';'MEG1011';'MEG1021';'MEG1031';'MEG1041';'MEG1111';'MEG1121';'MEG1131';'MEG1141';'MEG1211';'MEG1221';'MEG1231';'MEG1241';'MEG1311';'MEG1321';'MEG1331';'MEG1341';'MEG1411';'MEG1421';'MEG1431';'MEG1441';'MEG1511';'MEG1521';'MEG1531';'MEG1541';'MEG1611';'MEG1621';'MEG1631';'MEG1641';'MEG1711';'MEG1721';'MEG1731';'MEG1741';'MEG1811';'MEG1821';'MEG1831';'MEG1841';'MEG1911';'MEG1921';'MEG1931';'MEG1941';'MEG2011';'MEG2021';'MEG2031';'MEG2041';'MEG2111';'MEG2121';'MEG2131';'MEG2141';'MEG2211';'MEG2221';'MEG2231';'MEG2241';'MEG2311';'MEG2321';'MEG2331';'MEG2341';'MEG2411';'MEG2421';'MEG2431';'MEG2441';'MEG2511';'MEG2521';'MEG2531';'MEG2541';'MEG2611';'MEG2621';'MEG2631';'MEG2641'};
             %cfg.interpolation='linear';
-            cfg.xlim=[1,1];
-            cfg.zlim=[-max(abs(topo.avg)) max(abs(topo.avg))];
+            cfgp.xlim=[1,1];
+            cfgp.zlim=[-max(abs(topo.avg)) max(abs(topo.avg))];
             figure;
-            ft_topoplotER(cfg,topo);
+            ft_topoplotER(cfgp,topo);
             title('TOPOGRAPHY OF R')
         end
     else
@@ -570,26 +571,36 @@ else
 end
 cleanData=data-MCGall;
 figure;
-plot(time,MCG,'k')
+if isempty(ECG)
+    plot(time,MCG,'k')
+else
+    scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(cleanData(:,sampBefore+1:sampBefore+round(sRate*5)))));
+    plot(time,meanMEG/scale,'k')
+end
 hold on
 plot(time,mean(data),'r')
 plot(time,mean(cleanData),'g')
+if isempty(ECG)
 legend('MCG from template', 'mean MEG','mean clean MEG')
-
+else
+    legend('rescaled ECG', 'mean MEG','mean clean MEG')
+end
 Rtopo=HBtemp(:,maxi);
 if figs
-    topo.avg=Rtopo;
-    cfg.xlim=[1,1];
-    if strcmp(cfg.layout,'neuromag306mag.lay')
-        cfg.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
-        figure;
-        ft_topoplotER(cfg,topo);
-        title('MAGNETOMETERS, TOPOGRAPHY OF R, 2nd sweep')
-    else
-        cfg.zlim=[-max(abs(Rtopo)) max(abs(Rtopo))];
-        figure;
-        ft_topoplotER(cfg,topo);
-        title ('TOPOGRAPHY OF R, 2nd sweep')
+    if isfield(figOptions,'layout')
+        topo.avg=Rtopo;
+        cfgp.xlim=[1,1];
+        if strcmp(cfgp.layout,'neuromag306mag.lay')
+            cfgp.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
+            figure;
+            ft_topoplotER(cfgp,topo);
+            title('MAGNETOMETERS, TOPOGRAPHY OF R, 2nd sweep')
+        else
+            cfgp.zlim=[-max(abs(Rtopo)) max(abs(Rtopo))];
+            figure;
+            ft_topoplotER(cfgp,topo);
+            title ('TOPOGRAPHY OF R, 2nd sweep')
+        end
     end
 end
 display(['HB period (2nd sweep) is ',num2str(period4),'s']);
