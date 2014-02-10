@@ -1,4 +1,4 @@
-function [cleanData,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
+function [cleanData,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 
 % - data is a matrix with rows for channels, raw data, not filtered. it can
 % also be a filename.mat, directing to data matrix file, or a 4D filename such
@@ -58,11 +58,11 @@ function [cleanData,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions,EC
 %  T is large and R is small you may want to lower the highpass freq. It
 %  can save the day but beware, tricky business.
 %  - cfg.matchMethod can be 'xcorr' (default) or 'Abeles', it is how you find
-% the match between a template HB and meanMEG / ECG
+% the match between a template HB and meanMEG / ECG recording. you can also
+% use 'topo' and 'meanMEG' in order to define HB peaks on the topography
+% trace or the mean(MEG) channel. 
 
-%  recording
-
-% 4D users can run the function from the folder with 'c,*' file with no
+% 4D users can run the function from the folder with the data ('c,*') file, with no
 % input arguments:
 % cleanData=correctHB;
 % or like this cleanData=correctHB([],[],1); to get the figures.
@@ -608,6 +608,7 @@ if ~isempty(bads);
     cleanData(:,bads)=badData;
 end
 cleanData=cleanData(:,sampBefore+1:end-sampBefore);
+HBtimes=Ipeaks2in/sRate;
 %% internal functions
 function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod)
 betweenHBs=0.7; % after the T wave, before next qrs, 0.7 of period
