@@ -202,7 +202,7 @@ try
 	nCPU=matlabpool('size'); % 0 if no matlabpool yet;
 catch
 	disp('could not find "matlabpool". Setting "nCPU" to 1')
-	nCPU=1
+	nCPU=1;
 end
 if par
     closeLabs=false;
