@@ -11,7 +11,7 @@ function [cleanData,whereUp]=correctLF(data,sRate,chanLF,method,Lfreq,jobs)
 %   - jobs is for parallel processing with parfor, a number of CPU to use.
 %   default uses all, take care.
 % 4D users can run it as cleanData=LFcleanNoCue;
-% 
+%
 % Yuval Harpaz Jan 2014
 
 %% set defaults
@@ -30,7 +30,11 @@ end
 if ~exist('jobs','var')
     jobs=[];
 end
-
+if isempty(jobs)
+    par=false;
+else
+    par=true;
+end
 %% try to load data file and check if 4D-neuroimaging data
 
 if ~exist('data','var')
@@ -110,7 +114,7 @@ else
     [~, i125] = min(abs(F-125)); % index for 125Hz
     [~, i145] = min(abs(F-145));
     scale=mean(abs(Four(:,i125:i145)),2);
-     FourScaled=zeros(size(Four));
+    FourScaled=zeros(size(Four));
     for chani=1:size(Four,1)
         FourScaled(chani,:)=abs(Four(chani,:))/scale(chani);
     end
@@ -167,89 +171,99 @@ cycInterval=1000*mean(diff(whereUp))/sRate;
 if ~round(cycInterval)==1000/Lfreq
     error('whereUp has wrong frequency')
 end
-    
+
 badCue=find(diff(whereUp)>1.1*sRate/Lfreq); %#ok<EFIND>
 if ~isempty(badCue)
-%     for badi=1:length(badCue)
-%         prevZero=whereUp(badCue(badi));
-%         figure;
-%         plot(chanLF(prevZero-1000:prevZero+1000))
-%         hold on
-%         plot(1001,chanLF(prevZero),'.r')
-%     end
+    %     for badi=1:length(badCue)
+    %         prevZero=whereUp(badCue(badi));
+    %         figure;
+    %         plot(chanLF(prevZero-1000:prevZero+1000))
+    %         hold on
+    %         plot(1001,chanLF(prevZero),'.r')
+    %     end
     warning('some LF indices are more distant than they should be')
-    FIXME fill gaps, look for 150Hz on raw REF chan? 
+    FIXME fill gaps, look for 150Hz on raw REF chan?
 end
 if whereUp(1)>(ceil(sRate/Lfreq)+1)
     warning('first LF index is away from the beginning, guessing first cycles')
     firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
-     whereUp=[firstInd(1:end-1),whereUp];
+    whereUp=[firstInd(1:end-1),whereUp];
 end
 if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
-     warning('last LF index is away from the end, guessing last cycles')
-     lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
-     whereUp=[whereUp,lastInd(2:end)];
+    warning('last LF index is away from the end, guessing last cycles')
+    lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
+    whereUp=[whereUp,lastInd(2:end)];
 end
 
 %cleanData=data;
 
 %% prepare parallel processing
-closeLabs=false;
-nCPU=matlabpool('size'); % 0 if no matlabpool yet;
-if nCPU==0
-    closeLabs=true;
-    if isempty(jobs)
-        try
-            matlabpool;
-            jobs=matlabpool('size');
-        catch
-            jobs=1;
-            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+if par
+    closeLabs=false;
+    nCPU=matlabpool('size'); % 0 if no matlabpool yet;
+    if nCPU==0
+        closeLabs=true;
+        if isempty(jobs)
+            try
+                matlabpool;
+                jobs=matlabpool('size');
+            catch
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
+        else
+            try
+                matlabpool ('open', jobs);
+            catch
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
         end
     else
-        try
-            matlabpool ('open', jobs);
-        catch
-            jobs=1;
-            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
-        end
-    end
-else
-    if isempty(jobs)
-        try
-            jobs=matlabpool('size');
-        catch
-            jobs=1;
-            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
-        end
-    elseif nCPU~=jobs
-        try
-            matlabpool close
-            %matlabpool('local',jobs);
-            matlabpool ('open', jobs)
-        catch
-            jobs=1;
-            warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+        if isempty(jobs)
+            try
+                jobs=matlabpool('size');
+            catch
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
+        elseif nCPU~=jobs
+            try
+                matlabpool close
+                %matlabpool('local',jobs);
+                matlabpool ('open', jobs)
+            catch
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
         end
     end
 end
-
 %% cleaning the data
 % estimate time
 tic
 cleanLineF(data(good(1),:), whereUp, [], upper(method));
 time1st=toc;
-display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
+if par
+    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
+else
+    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/1*2)),'min'])
+end
 % do the cleaning
 cleanData=data(good,:);
-parfor chani=1:length(good)
-    cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+if par
+    parfor chani=1:length(good)
+        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+    end
+else
+    for chani=1:length(good)
+        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+    end
 end
-
 data(good,:)=cleanData;
 clear cleanData
 cleanData=data;% sorry about this mess, the parfor made me do this
-clear data 
+clear data
 % display some results
 [Four,F]=fftBasic(cleanData(good,:),round(sRate));
 [~, i125] = min(abs(F-125)); % index for 125Hz
@@ -265,9 +279,11 @@ hold on
 plot(F,meanPSDclean,'g')
 legend('original','clean')
 title('PSD after rescaling and averaging channels')
-if closeLabs
-    try
-        matlabpool close
+if par
+    if closeLabs
+        try
+            matlabpool close
+        end
     end
 end
 function [Lfreq,meanPSD]=findLfreq(fourier,freq)
