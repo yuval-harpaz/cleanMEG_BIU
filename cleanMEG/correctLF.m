@@ -153,18 +153,28 @@ elseif length(chanLF)==1;
     chanLF=data(chanLF,:);
 end
 if lookForLF
-    if ~exist('BPfilt','var')
-        BPobj=fdesign.bandpass(...
-            'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
-            Lfreq-10,Lfreq-5,Lfreq+5,Lfreq+10,60,1,60,sRate);
-        BPfilt=design(BPobj ,'butter');
+    if length(unique(chanLF))==2 % zero crossing is coded in chanLF (trigger channel)
+        trigShift=zeros(size(chanLF));
+        trigShift(2:end)=chanLF(1:end-1);
+        trigShift=uint16(trigShift);
+        whereUp=find((chanLF-trigShift)>0);
+        if max(diff(whereUp))>sRate/Lfreq+3 || min(diff(whereUp))<sRate/Lfreq-3
+            warning('some triggers are at irregular times')
+        end
+    else
+        if ~exist('BPfilt','var')
+            BPobj=fdesign.bandpass(...
+                'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
+                Lfreq-10,Lfreq-5,Lfreq+5,Lfreq+10,60,1,60,sRate);
+            BPfilt=design(BPobj ,'butter');
+        end
+        chanLF=myFilt(chanLF-mean(chanLF(1:round(sRate))),BPfilt);
+        chanLFShift=[0,chanLF(1:end-1)];
+        logsum=chanLF>0;
+        logsum2=chanLFShift<0;
+        whereUp=logsum+logsum2==2;
+        whereUp=find(whereUp);
     end
-    chanLF=myFilt(chanLF-mean(chanLF(1:round(sRate))),BPfilt);
-    chanLFShift=[0,chanLF(1:end-1)];
-    logsum=chanLF>0;
-    logsum2=chanLFShift<0;
-    whereUp=logsum+logsum2==2;
-    whereUp=find(whereUp);
 end
 %% check that whereUp is OK
 cycInterval=1000*mean(diff(whereUp))/sRate;
