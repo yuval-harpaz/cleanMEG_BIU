@@ -4,7 +4,7 @@ function [cleanData,whereUp]=LFcleanNoCue(data,sRate,chanLF,method,Lfreq,jobs)
 %   -  chanLF is a channel containing a lot of 50 or 60Hz, can be a MEG
 % reference channel or leave empty to detect high LF chan automatically.
 % you can also give 'time', the consequence is that LF will not be searched
-% on any channel, but will be guessed according to time only. requires Lfreq.
+% on any channel, but will be guessed according to time only. requires Lfreq and works with ADAPTIVE method.
 %   -  method is 'GLOBAL' or 'ADAPTIVE' (default), see cleanLineF for more on that.
 %   -  Lfreq is the noise frequency, 50 or 60. by default the Lfreq is
 %   detected automatically
@@ -155,7 +155,7 @@ if lookForLF
             Lfreq-10,Lfreq-5,Lfreq+5,Lfreq+10,60,1,60,sRate);
         BPfilt=design(BPobj ,'butter');
     end
-    chanLF=myFilt(chanLF,BPfilt);
+    chanLF=myFilt(chanLF-mean(chanLF(1:round(sRate))),BPfilt);
     chanLFShift=[0,chanLF(1:end-1)];
     logsum=chanLF>0;
     logsum2=chanLFShift<0;
@@ -170,8 +170,15 @@ end
     
 badCue=find(diff(whereUp)>1.1*sRate/Lfreq); %#ok<EFIND>
 if ~isempty(badCue)
+%     for badi=1:length(badCue)
+%         prevZero=whereUp(badCue(badi));
+%         figure;
+%         plot(chanLF(prevZero-1000:prevZero+1000))
+%         hold on
+%         plot(1001,chanLF(prevZero),'.r')
+%     end
     warning('some LF indices are more distant than they should be')
-    FIXME fill gaps
+    FIXME fill gaps, look for 150Hz on raw REF chan? 
 end
 if whereUp(1)>(ceil(sRate/Lfreq)+1)
     warning('first LF index is away from the beginning, guessing first cycles')
@@ -232,7 +239,7 @@ end
 tic
 cleanLineF(data(good(1),:), whereUp, [], upper(method));
 time1st=toc;
-display(['cleaning channels one by one, wait about ',num2str(round(time1st*(length(good)-1)/60/jobs*2)),'min'])
+display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
 % do the cleaning
 cleanData=data(good,:);
 parfor chani=1:length(good)
