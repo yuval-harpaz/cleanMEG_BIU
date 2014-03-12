@@ -1,4 +1,4 @@
-function [cleanData,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
+function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 
 % - data is a matrix with rows for channels, raw data, not filtered. it can
 % also be a filename.mat, directing to data matrix file, or a 4D filename such
@@ -249,6 +249,7 @@ if isempty(ECG)
     meanMEGf=meanMEGf-median(meanMEGf);
 end
 %% peak detection on MCG (or ECG) signal
+disp('looking for HB peaks')
 [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*minPeriod)); % 450ms interval minimum
 % test if, by chance, the HB field is mainly negative
 posHB=true;
@@ -564,24 +565,34 @@ if ~isempty(badSNR)
         diary off
     end
 end
-if posHB
-    MCGall=makeMCGbyCh(HBtemp,maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
-else
-    MCGall=makeMCGbyCh(HBtemp,maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
+% clear some memory
+meanData=mean(data);
+MEGmean=meanMEG;
+clear meanMEG* topoTra*
+meanMEG=MEGmean;
+clear MEGmean;
+display('cleaning channels from template one by one, may take half a minute')
+for chani=1:size(HBtemp,1)
+    if posHB
+        MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
+    else
+        MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
+    end
+    data(chani,:)=data(chani,:)-MCGall;
 end
-cleanData=data-MCGall;
+%cleanData=data-MCGall;
 figure;
 if isempty(ECG)
     plot(time,MCG,'k')
 else
-    scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(cleanData(:,sampBefore+1:sampBefore+round(sRate*5)))));
+    scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(data(:,sampBefore+1:sampBefore+round(sRate*5)))));
     plot(time,meanMEG/scale,'k')
 end
 hold on
-plot(time,mean(data),'r')
-plot(time,mean(cleanData),'g')
+plot(time,meanData,'r')
+plot(time,mean(data),'g')
 if isempty(ECG)
-legend('MCG from template', 'mean MEG','mean clean MEG')
+    legend('MCG from template', 'mean MEG','mean clean MEG')
 else
     legend('rescaled ECG', 'mean MEG','mean clean MEG')
 end
@@ -605,9 +616,9 @@ if figs
 end
 display(['HB period (2nd sweep) is ',num2str(period4),'s']);
 if ~isempty(bads);
-    cleanData(:,bads)=badData;
+    data(:,bads)=badData;
 end
-cleanData=cleanData(:,sampBefore+1:end-sampBefore);
+data=data(:,sampBefore+1:end-sampBefore);
 HBtimes=Ipeaks2in/sRate;
 %% internal functions
 function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod)
