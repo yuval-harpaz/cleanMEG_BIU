@@ -165,12 +165,12 @@ if lookForLF
         if ~exist('BPfilt','var')
             BPobj=fdesign.bandpass(...
                 'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
-                Lfreq-10,Lfreq-5,Lfreq+5,Lfreq+10,60,1,60,sRate);
+                Lfreq-10,Lfreq-5,Lfreq*2+5,Lfreq*2+10,60,1,60,sRate);
             BPfilt=design(BPobj ,'butter');
         end
-        chanLF=myFilt(chanLF-mean(chanLF(1:round(sRate))),BPfilt);
-        chanLFShift=[0,chanLF(1:end-1)];
-        logsum=chanLF>0;
+        chanLFf=myFilt(chanLF-mean(chanLF(1:round(sRate))),BPfilt);
+        chanLFShift=[0,chanLFf(1:end-1)];
+        logsum=chanLFf>0;
         logsum2=chanLFShift<0;
         whereUp=logsum+logsum2==2;
         whereUp=find(whereUp);
@@ -181,28 +181,75 @@ cycInterval=1000*mean(diff(whereUp))/sRate;
 if ~round(cycInterval)==1000/Lfreq
     error('whereUp has wrong frequency')
 end
-
+doBySeg=false;
 badCue=find(diff(whereUp)>1.1*sRate/Lfreq); %#ok<EFIND>
 if ~isempty(badCue)
-    %     for badi=1:length(badCue)
-    %         prevZero=whereUp(badCue(badi));
-    %         figure;
-    %         plot(chanLF(prevZero-1000:prevZero+1000))
-    %         hold on
-    %         plot(1001,chanLF(prevZero),'.r')
-    %     end
-    warning('some LF indices are more distant than they should be')
-    FIXME fill gaps, look for 150Hz on raw REF chan?
+    % try matching a template
+    hpObj=fdesign.highpass('Fst,Fp,Ast,Ap',0.1,round(Lfreq*0.67),60,1,sRate);%
+    Filt=design(hpObj ,'butter');
+    chanLFhp = myFilt(chanLF,Filt);
+    cycCount=0;
+    temp=zeros(1,round(sRate/Lfreq));
+    for upi=round(1:sRate/Lfreq:sRate*5)
+        cycCount=cycCount+1;
+        temp(cycCount,:)=chanLFhp(upi:upi+round(sRate/Lfreq)-1);
+    end
+    temp=mean(temp,1);
+    [snr,signal]=match_temp(chanLFhp,temp,1);
+    [~, IpeaksPos]=findPeaks(signal,0,round(0.75*length(temp))); % no peaks closer than 60% of period
+    [~, IpeaksNeg]=findPeaks(-signal,0,round(0.75*length(temp)));
+    
+    %     [~, IpeaksPos]=findPeaks(snr,0,round(0.75*length(temp))); % no peaks closer than 60% of period
+    %     [~, IpeaksNeg]=findPeaks(-snr,0,round(0.75*length(temp))); % no peaks closer than 60% of period
+    if std(diff(IpeaksPos))<std(diff(IpeaksNeg))
+        Ipeaks=IpeaksPos;
+    else
+        Ipeaks=IpeaksNeg;
+    end
+    if std(diff(Ipeaks))>0.2*sRate/Lfreq
+        warning('std of cue interval is large')
+    end
+    badCue1=find(diff(Ipeaks)>ceil(1.2*sRate/Lfreq));
+    if ~isempty(badCue1)
+        whereUp=setdiff(Ipeaks,Ipeaks(badCue1));
+        % FIXME cancel the segment by segment and perhapse add missing cues
+        
+        %         goodSegi=0;
+        %         minInterval=ceil(256*sRate/Lfreq); % minimum 256 cycles to get good template
+        %         if badCue1(1)>minInterval
+        %             goodSegi=goodSegi+1;
+        %             goodSeg(1,1:2)=[1,badCue1(1)];
+        %         end
+        %         for cuei=1:length(badCue1)-1
+        %             if Ipeaks(badCue1(cuei+1))-Ipeaks(badCue1(cuei))>minInterval
+        %                 goodSegi=goodSegi+1;
+        %                 goodSeg(goodSegi,1:2)=[badCue1(cuei),badCue1(cuei+1)];
+        %             end
+        %         end
+        %         if Ipeaks(end)-Ipeaks(badCue1(end))>minInterval
+        %             goodSegi=goodSegi+1;
+        %             goodSeg(goodSegi,1:2)=[badCue1(end),length(Ipeaks)];
+        %         end
+        %         doBySeg=true;
+        %         segments=Ipeaks(goodSeg);
+        %         save segments segments
+        %     end
+    else
+        whereUp=Ipeaks;
+    end
+    
 end
-if whereUp(1)>(ceil(sRate/Lfreq)+1)
-    warning('first LF index is away from the beginning, guessing first cycles')
-    firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
-    whereUp=[firstInd(1:end-1),whereUp];
-end
-if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
-    warning('last LF index is away from the end, guessing last cycles')
-    lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
-    whereUp=[whereUp,lastInd(2:end)];
+if ~doBySeg
+    if whereUp(1)>(ceil(sRate/Lfreq)+1)
+        warning('first LF index is away from the beginning, guessing first cycles')
+        firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
+        whereUp=[firstInd(1:end-1),whereUp];
+    end
+    if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
+        warning('last LF index is away from the end, guessing last cycles')
+        lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
+        whereUp=[whereUp,lastInd(2:end)];
+    end
 end
 
 %cleanData=data;
@@ -210,12 +257,12 @@ end
 %% prepare parallel processing
 if par
     closeLabs=false;
-	try
-		nCPU=matlabpool('size'); % 0 if no matlabpool yet;
-	catch
-		disp('could not find "matlabpool". Setting "nCPU" to 1')
-		nCPU=1;
-	end
+    try
+        nCPU=matlabpool('size'); % 0 if no matlabpool yet;
+    catch
+        disp('could not find "matlabpool". Setting "nCPU" to 1')
+        nCPU=1;
+    end
     if nCPU==0
         closeLabs=true;
         if isempty(jobs)
@@ -256,26 +303,58 @@ if par
 end
 %% cleaning the data
 % estimate time
-tic
-cleanLineF(data(good(1),:), whereUp, [], upper(method));
-time1st=toc;
-if par
-    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
-else
-    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/1*2)),'min'])
+if ~doBySeg
+    tic
+    cleanLineF(data(good(1),:), whereUp, [], upper(method));
+    time1st=toc;
+    if par
+        display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
+    else
+        display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/1*2)),'min'])
+    end
 end
 % do the cleaning
 cleanData=data(good,:);
-if par
-    parfor chani=1:length(good)
-        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+if ~doBySeg
+    
+    if par
+        parfor chani=1:length(good)
+            cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+        end
+    else
+        for chani=1:length(good)
+            cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+        end
     end
+    data(good,:)=cleanData;
 else
-    for chani=1:length(good)
-        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+    for segi=1:size(goodSeg,1)
+        if par
+            parfor chani=1:length(good)
+                %cleanData(chani,whereUp(goodSeg(segi,1):whereUp(goodSeg(segi,2))=cleanLineF(cleanData(chani,whereUp(goodSeg(segi,1):whereUp(goodSeg(segi,2)), whereUp(goodSeg(segi,1):goodSeg(segi,2)), [], upper(method));
+            end
+        else
+            startSeg=whereUp(goodSeg(segi,1));
+            endSeg=whereUp(goodSeg(segi,2));
+            wU=whereUp(goodSeg(segi,1):goodSeg(segi,2))-startSeg+1;
+            for chani=1:length(good)
+                
+                clDa=cleanLineF(cleanData(chani,startSeg:endSeg), wU, [], upper(method));
+                if chani==1
+                    [Ycl,F]=fftBasic(clDa,678.17);
+                    [Y,F]=fftBasic(cleanData(chani,startSeg:endSeg),678.17);
+                    figure;
+                    plot(F,abs(Y),'r')
+                    hold on
+                    plot(F,abs(Ycl))
+                    title([num2str(round(startSeg/sRate)),' to ',num2str(round(endSeg/sRate)),'sec'])
+                end
+                cleanData(chani,whereUp(goodSeg(segi,1)):whereUp(goodSeg(segi,2)))=clDa;%cleanLineF(cleanData(chani,whereUp(goodSeg(segi,1)):whereUp(goodSeg(segi,2))), whereUp(goodSeg(segi,1):goodSeg(segi,2)), [], upper(method));
+            end
+        end
+        data(good,startSeg:endSeg)=cleanData(:,startSeg:endSeg);
     end
 end
-data(good,:)=cleanData;
 clear cleanData
 cleanData=data;% sorry about this mess, the parfor made me do this
 clear data
