@@ -401,7 +401,7 @@ switch matchMethod
     case 'xcorr'
         matchTrace=XCORR(meanMEGpos,temp1e,maxi);
     case 'Abeles'
-        [snr,signal]=matchTemp(meanMEGxcrF,temp1e,maxi);
+        [snr,signal]=match_temp(meanMEGxcrF,temp1e,maxi);
         matchTrace=snr;
     case 'topo'
         matchTrace=topoTrace;
