@@ -120,9 +120,7 @@ else
     end
     meanPSD=mean(FourScaled);
 end
-%% find LF cycles
-
-
+%% find LF cycles on a filtered channel
 lookForLF=true;
 
 if  isempty(chanLF);
@@ -176,13 +174,12 @@ if lookForLF
         whereUp=find(whereUp);
     end
 end
-%% check that whereUp is OK
+%% check that whereUp is OK. if not, find cycles by template matching
 cycInterval=1000*mean(diff(whereUp))/sRate;
 if ~round(cycInterval)==1000/Lfreq
-    error('whereUp has wrong frequency')
+    warning('whereUp has wrong frequency')
 end
-doBySeg=false;
-badCue=find(diff(whereUp)>1.1*sRate/Lfreq); %#ok<EFIND>
+badCue=find(diff(whereUp)>1.2*sRate/Lfreq); %#ok<EFIND>
 if ~isempty(badCue)
     % try matching a template
     hpObj=fdesign.highpass('Fst,Fp,Ast,Ap',0.1,round(Lfreq*0.67),60,1,sRate);%
@@ -209,50 +206,39 @@ if ~isempty(badCue)
     if std(diff(Ipeaks))>0.2*sRate/Lfreq
         warning('std of cue interval is large')
     end
-    badCue1=find(diff(Ipeaks)>ceil(1.2*sRate/Lfreq));
-    if ~isempty(badCue1)
-        whereUp=setdiff(Ipeaks,Ipeaks(badCue1));
-        % FIXME cancel the segment by segment and perhapse add missing cues
-        
-        %         goodSegi=0;
-        %         minInterval=ceil(256*sRate/Lfreq); % minimum 256 cycles to get good template
-        %         if badCue1(1)>minInterval
-        %             goodSegi=goodSegi+1;
-        %             goodSeg(1,1:2)=[1,badCue1(1)];
-        %         end
-        %         for cuei=1:length(badCue1)-1
-        %             if Ipeaks(badCue1(cuei+1))-Ipeaks(badCue1(cuei))>minInterval
-        %                 goodSegi=goodSegi+1;
-        %                 goodSeg(goodSegi,1:2)=[badCue1(cuei),badCue1(cuei+1)];
-        %             end
-        %         end
-        %         if Ipeaks(end)-Ipeaks(badCue1(end))>minInterval
-        %             goodSegi=goodSegi+1;
-        %             goodSeg(goodSegi,1:2)=[badCue1(end),length(Ipeaks)];
-        %         end
-        %         doBySeg=true;
-        %         segments=Ipeaks(goodSeg);
-        %         save segments segments
-        %     end
-    else
-        whereUp=Ipeaks;
-    end
+    
+    % whereUp=setdiff(Ipeaks,Ipeaks(badCue)); % to ignore bad cues
+    whereUp=Ipeaks;
     
 end
-if ~doBySeg
-    if whereUp(1)>(ceil(sRate/Lfreq)+1)
-        warning('first LF index is away from the beginning, guessing first cycles')
-        firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
-        whereUp=[firstInd(1:end-1),whereUp];
-    end
-    if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
-        warning('last LF index is away from the end, guessing last cycles')
-        lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
-        whereUp=[whereUp,lastInd(2:end)];
-    end
+cycInterval=1000*mean(diff(whereUp))/sRate;
+if ~round(cycInterval)==1000/Lfreq
+    error('whereUp has wrong frequency')
 end
 
-%cleanData=data;
+
+
+
+if whereUp(1)>(ceil(sRate/Lfreq)+1)
+     diary LFlog.txt
+    warning('first LF index is away from the beginning, guessing first cycles')
+    diary off
+    firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
+    whereUp=[firstInd(1:end-1),whereUp];
+end
+if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
+     diary LFlog.txt
+    warning('last LF index is away from the end, guessing last cycles')
+    diary off
+    lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
+    whereUp=[whereUp,lastInd(2:end)];
+end
+badCue=find(diff(whereUp)>ceil(1.2*sRate/Lfreq));
+if ~isempty(badCue)
+    diary LFlog.txt
+    disp(['irregular interval between cues at (seconds): ',num2str(whereUp(badCue)/sRate)])
+    diary off
+end
 
 %% prepare parallel processing
 if par
@@ -303,62 +289,35 @@ if par
 end
 %% cleaning the data
 % estimate time
-if ~doBySeg
-    tic
-    cleanLineF(data(good(1),:), whereUp, [], upper(method));
-    time1st=toc;
-    if par
-        display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
-    else
-        display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/1*2)),'min'])
-    end
+tic
+cleanLineF(data(good(1),:), whereUp, [], upper(method));
+time1st=toc;
+if par
+    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
+else
+    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/1*2)),'min'])
 end
 % do the cleaning
 cleanData=data(good,:);
-if ~doBySeg
-    
-    if par
-        parfor chani=1:length(good)
-            cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
-        end
-    else
-        for chani=1:length(good)
-            cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
-        end
+
+if par
+    parfor chani=1:length(good)
+        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
     end
-    data(good,:)=cleanData;
 else
-    for segi=1:size(goodSeg,1)
-        if par
-            parfor chani=1:length(good)
-                %cleanData(chani,whereUp(goodSeg(segi,1):whereUp(goodSeg(segi,2))=cleanLineF(cleanData(chani,whereUp(goodSeg(segi,1):whereUp(goodSeg(segi,2)), whereUp(goodSeg(segi,1):goodSeg(segi,2)), [], upper(method));
-            end
-        else
-            startSeg=whereUp(goodSeg(segi,1));
-            endSeg=whereUp(goodSeg(segi,2));
-            wU=whereUp(goodSeg(segi,1):goodSeg(segi,2))-startSeg+1;
-            for chani=1:length(good)
-                
-                clDa=cleanLineF(cleanData(chani,startSeg:endSeg), wU, [], upper(method));
-                if chani==1
-                    [Ycl,F]=fftBasic(clDa,678.17);
-                    [Y,F]=fftBasic(cleanData(chani,startSeg:endSeg),678.17);
-                    figure;
-                    plot(F,abs(Y),'r')
-                    hold on
-                    plot(F,abs(Ycl))
-                    title([num2str(round(startSeg/sRate)),' to ',num2str(round(endSeg/sRate)),'sec'])
-                end
-                cleanData(chani,whereUp(goodSeg(segi,1)):whereUp(goodSeg(segi,2)))=clDa;%cleanLineF(cleanData(chani,whereUp(goodSeg(segi,1)):whereUp(goodSeg(segi,2))), whereUp(goodSeg(segi,1):goodSeg(segi,2)), [], upper(method));
-            end
-        end
-        data(good,startSeg:endSeg)=cleanData(:,startSeg:endSeg);
+    for chani=1:length(good)
+        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
     end
 end
+data(good,:)=cleanData;
 clear cleanData
 cleanData=data;% sorry about this mess, the parfor made me do this
 clear data
-% display some results
+time2nd=toc;
+mins=time2nd/60;
+secs=60*(mins-floor(mins));
+display(['well, it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec']);
+disp('plotting')
 [Four,F]=fftBasic(cleanData(good,:),round(sRate));
 [~, i125] = min(abs(F-125)); % index for 125Hz
 [~, i145] = min(abs(F-145));
