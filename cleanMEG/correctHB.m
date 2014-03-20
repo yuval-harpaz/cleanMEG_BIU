@@ -60,7 +60,9 @@ function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions
 %  - cfg.matchMethod can be 'xcorr' (default) or 'Abeles', it is how you find
 % the match between a template HB and meanMEG / ECG recording. you can also
 % use 'topo' and 'meanMEG' in order to define HB peaks on the topography
-% trace or the mean(MEG) channel. 
+% trace or the mean(MEG) channel.
+%  - cfg.betweenHBs (0.7) is how long the template should continue after the 
+% peak, in relation to the period (0.7 is 70% of the period)
 
 % 4D users can run the function from the folder with the data ('c,*') file, with no
 % input arguments:
@@ -106,6 +108,7 @@ peakFiltFreq=default('peakFiltFreq',[7 90],cfg);
 ampFiltFreq=default('ampFiltFreq',2,cfg);% [7 90] for band pass
 tempFiltFreq=default('tempFiltFreq',peakFiltFreq,cfg);
 matchMethod=default('matchMethod','xcorr',cfg);
+betweenHBs=default('betweenHBs',0.7,cfg); % how long the right side of template HB should be
 linThr=0.25; % threshold for low amplitude HB, use average amplitude when below this ratio    
 
 %% checking defaults for 4D data
@@ -471,12 +474,13 @@ Ipeaks2in=Ipeaks2(Ipeaks2>sampBefore);
 Ipeaks2in=Ipeaks2in(Ipeaks2in<(size(data,2)-sampBefore));
 % make mcg trace for meanMEG
 if posHB
-    [temp2e,period4]=makeTempHB(meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod);
+    [temp2e,period4]=makeTempHB(meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,betweenHBs);
 else
-    [temp2e,period4]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod);
+    [temp2e,period4]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,betweenHBs);
 end
 
-maxi=round(0.3*length(temp2e))+1;
+%maxi=round(0.3*length(temp2e))+1;
+maxi=round(0.3*period4*sRate)+1;
 [~,mi]=max(temp2e(maxi-round(sRate/100):maxi+round(sRate/100)));
 maxi=maxi-round(sRate/100)+mi-1;
 %% test R amplitude
@@ -619,10 +623,12 @@ if ~isempty(bads);
     data(:,bads)=badData;
 end
 data=data(:,sampBefore+1:end-sampBefore);
-HBtimes=Ipeaks2in/sRate;
+HBtimes=(Ipeaks2in-sampBefore)/sRate;
 %% internal functions
-function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod)
-betweenHBs=0.7; % after the T wave, before next qrs, 0.7 of period
+function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod,betweenHBs)
+if ~exist('betweenHBs','var')
+    betweenHBs=0.7; % after the T wave, before next qrs, 0.7 of period
+end
 HB=zeros(size(trace,1),sampBefore*2+1);
 for epochi=1:length(peakIndex)
     HB=HB+trace(:,peakIndex(epochi)-sampBefore:peakIndex(epochi)+sampBefore);
@@ -670,7 +676,7 @@ else
     warning('could not find cross correlation within extended template, guessing period')
     period4=period;
 end
-temp=HB(sampBefore-round(sRate*(1-betweenHBs)*period4):sampBefore+round(sRate*betweenHBs*period4));
+temp=HB(sampBefore-round(sRate*0.3*period4):sampBefore+round(sRate*betweenHBs*period4));
 edgeRepressor=ones(size(temp));
 ms20=round(sRate/50);
 reducVec=0:1/ms20:1;
