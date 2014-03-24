@@ -34,6 +34,8 @@ function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions
 % trace (meanMEG). another filter can be used there, in order to supress T
 % for better timing. when the R is small and T can help the template match
 % leave some low frequencies in. use tempFiltFreq for this one.
+% I added filtering option dataFiltFreq for the data (and meanMEG) to get rid of low
+% frequencies (DC recordings). not performed by default.
 
 
 %  - cfg.chanSnrThr (default 0) is the threshold (in z scores) that tell which channels are cleaned and which
@@ -61,9 +63,13 @@ function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions
 % the match between a template HB and meanMEG / ECG recording. you can also
 % use 'topo' and 'meanMEG' in order to define HB peaks on the topography
 % trace or the mean(MEG) channel.
-%  - cfg.betweenHBs (0.7) is how long the template should continue after the 
-% peak, in relation to the period (0.7 is 70% of the period)
-
+%  - cfg.afterHB (0.7) is how long the template should continue after the 
+% peak (seconds)
+%  - cfg.beforeHB (70% of the period) is when the template should start before the 
+% peak (seconds)
+%  - cfg.repressTime (ms) is how much of the template to repress to zero on
+%  the edges
+%
 % 4D users can run the function from the folder with the data ('c,*') file, with no
 % input arguments:
 % cleanData=correctHB;
@@ -107,9 +113,12 @@ jZthr=default('jZthr',15,cfg);
 peakFiltFreq=default('peakFiltFreq',[7 90],cfg);
 ampFiltFreq=default('ampFiltFreq',2,cfg);% [7 90] for band pass
 tempFiltFreq=default('tempFiltFreq',peakFiltFreq,cfg);
+dataFiltFreq=default('dataFiltFreq',[],cfg);
 matchMethod=default('matchMethod','xcorr',cfg);
-betweenHBs=default('betweenHBs',0.7,cfg); % how long the right side of template HB should be
-linThr=0.25; % threshold for low amplitude HB, use average amplitude when below this ratio    
+beforeHBs=default('beforeHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.3*period
+afterHBs=default('afterHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.7*period
+linThr=default('linThr',0.25,cfg);
+linThr=; % threshold for low amplitude HB, use average amplitude when below this ratio    
 
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
@@ -171,6 +180,7 @@ if ~isempty(ECG)
 else
     meanMEG=double(mean(data));
 end
+repressTime=default('repressTime',round(sRate/50),cfg);
 %% pad with zeros for templite slide
 sampBefore=round(sRate*maxPeriod);
 %time=1/sRate:1/sRate:size(data,2)/sRate;
@@ -181,10 +191,35 @@ meanMEG=[zeros(1,sampBefore),meanMEG,zeros(1,sampBefore)];
 data=[zeros(size(data,1),sampBefore),data,zeros(size(data,1),sampBefore)];
 
 realDataSamp=[sampBefore+1,size(data,2)-sampBefore];
-%% filter mean MEG (or ECG) data
+%% Filter data if requested
+if ~isempty(dataFiltFreq)
+    display('filtering the data')
+    if length(dataFiltFreq)==2
+        Fp1=dataFiltFreq(1);
+        Fst1=max([0.01,Fp1-1]);
+        ObjData=fdesign.bandpass(...
+            'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
+            Fst1,Fp1,dataFiltFreq(2),dataFiltFreq(2)+10,60,1,60,sRate);
+    elseif length(dataFiltFreq)==1
+        if dataFiltFreq<15
+            ObjData=fdesign.highpass('Fst,Fp,Ast,Ap',max([dataFiltFreq-1,0.01]),dataFiltFreq,60,1,sRate);%
+        elseif dataFiltFreq>=15
+            ObjData=fdesign.lowpass('Fp,Fst,Ap,Ast',dataFiltFreq,dataFiltFreq+10,1,60,sRate);
+        end
+        FiltData=design(ObjData ,'butter');
+    end
+    data = myFilt(data,FiltData);
+    meanMEG=myFilt(meanMEG,FiltData);
+end
+    
+for chani=1:size(data,1)
+    data(chani,:)=data(chani,:)-median(data(chani,:));
+end
+meanMEG=meanMEG-median(meanMEG);
+%% filter mean MEG (or ECG)
 % filtering to pass from 5-7Hz to 90-110Hz
 if ~(peakFiltFreq(1)>1)
-    Fst1=0.0001;
+    Fst1=0.001;
 else
     Fst1=peakFiltFreq(1)-1;
 end
@@ -368,13 +403,13 @@ if tempFiltFreq==peakFiltFreq
 else
     if length(tempFiltFreq)==2
         Fp1=tempFiltFreq(1);
-        Fst1=max([0.001,Fp1-1]);
+        Fst1=max([0.01,Fp1-1]);
         ObjXcr=fdesign.bandpass(...
             'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
             Fst1,Fp1,tempFiltFreq(2),tempFiltFreq(2)+10,60,1,60,sRate);
     elseif length(tempFiltFreq)==1
         if tempFiltFreq<15
-            ObjXcr=fdesign.highpass('Fst,Fp,Ast,Ap',max([ampFiltFreq-1,0.001]),ampFiltFreq,60,1,sRate);%
+            ObjXcr=fdesign.highpass('Fst,Fp,Ast,Ap',max([tempFiltFreq-1,0.01]),tempFiltFreq,60,1,sRate);%
         elseif tempFiltFreq>=15
             ObjXcr=fdesign.lowpass('Fp,Fst,Ap,Ast',tempFiltFreq,tempFiltFreq+10,1,60,sRate);
         end
@@ -472,15 +507,26 @@ end
 % ignore edges
 Ipeaks2in=Ipeaks2(Ipeaks2>sampBefore);
 Ipeaks2in=Ipeaks2in(Ipeaks2in<(size(data,2)-sampBefore));
+% set template edges as ratio of the period
+if isempty(afterHBs)
+    afterHBs=0.7;
+else
+    afterHBs=afterHBs/period3;
+end
+if isempty(beforeHBs)
+    beforeHBs=0.3;
+else
+    beforeHBs=beforeHBs/period3;
+end
 % make mcg trace for meanMEG
 if posHB
-    [temp2e,period4]=makeTempHB(meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,betweenHBs);
+    [temp2e,period4]=makeTempHB(meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime);
 else
-    [temp2e,period4]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,betweenHBs);
+    [temp2e,period4]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime);
 end
 
 %maxi=round(0.3*length(temp2e))+1;
-maxi=round(0.3*period4*sRate)+1;
+maxi=round(beforeHBs*period4*sRate)+1;
 [~,mi]=max(temp2e(maxi-round(sRate/100):maxi+round(sRate/100)));
 maxi=maxi-round(sRate/100)+mi-1;
 %% test R amplitude
@@ -575,6 +621,10 @@ MEGmean=meanMEG;
 clear meanMEG* topoTra*
 meanMEG=MEGmean;
 clear MEGmean;
+% prepare avg HB fig
+HBtimes=(Ipeaks2in-sampBefore)/sRate;
+[avgHB,avgTimes]=meanHB(data(:,sampBefore+1:end-sampBefore),sRate,HBtimes);
+% clean
 display('cleaning channels from template one by one, may take half a minute')
 for chani=1:size(HBtemp,1)
     if posHB
@@ -618,16 +668,30 @@ if figs
         end
     end
 end
-display(['HB period (2nd sweep) is ',num2str(period4),'s']);
+avgHBclean=meanHB(data(:,sampBefore+1:end-sampBefore),sRate,HBtimes);
+figure;plot(avgTimes,avgHB,'r')
+hold on
+plot(avgTimes,avgHBclean,'g')
+title('averaged heartbeat, before (red) and after')
+%display(['HB period (2nd sweep) is ',num2str(period4),'s']);
 if ~isempty(bads);
     data(:,bads)=badData;
 end
+% plot avg HB before and after
+
 data=data(:,sampBefore+1:end-sampBefore);
-HBtimes=(Ipeaks2in-sampBefore)/sRate;
+
+
 %% internal functions
-function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod,betweenHBs)
-if ~exist('betweenHBs','var')
-    betweenHBs=0.7; % after the T wave, before next qrs, 0.7 of period
+function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime)
+if ~exist('afterHBs','var')
+    afterHBs=0.7; % after the T wave, before next qrs, 0.7 of period
+end
+if ~exist('beforeHBs','var')
+    beforeHBs=0.3; 
+end
+if ~exist('repressTime','var')
+    repressTime=20; % how much time to supress
 end
 HB=zeros(size(trace,1),sampBefore*2+1);
 for epochi=1:length(peakIndex)
@@ -676,17 +740,17 @@ else
     warning('could not find cross correlation within extended template, guessing period')
     period4=period;
 end
-temp=HB(sampBefore-round(sRate*0.3*period4):sampBefore+round(sRate*betweenHBs*period4));
+temp=HB(sampBefore-round(sRate*beforeHBs*period4):sampBefore+round(sRate*afterHBs*period4));
 edgeRepressor=ones(size(temp));
-ms20=round(sRate/50);
-reducVec=0:1/ms20:1;
+
+reducVec=0:1/repressTime:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
 edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
 tempe=temp-median(temp);
 tempe=tempe.*edgeRepressor;
 time=1/sRate:1/sRate:length(temp)/sRate;
-time=time-(1-betweenHBs)*period4;
+time=time-(1-afterHBs)*period4;
 if figs
     figure;
     plot(time,tempe,'g')
@@ -727,7 +791,7 @@ end
 % disp(['overlapping heartbeats at ',num2str(Ipeaks(HBol/sRate)),'s'])
 % diary off
 % end
-function tempe=HBbyChan(trace,sRate,peakIndex,sampBefore,sampAfter)
+function tempe=HBbyChan(trace,sRate,peakIndex,sampBefore,sampAfter,repressTime)
 HB=zeros(size(trace,1),sampBefore+1+sampAfter);
 % average HBs
 for epochi=1:length(peakIndex)
@@ -736,12 +800,12 @@ end
 HB=HB/epochi;
 % reduce edges to vero
 edgeRepressor=ones(1,size(HB,2));
-ms20=round(sRate/50);
-reducVec=0:1/ms20:1;
+repressTime=round(sRate/50);
+reducVec=0:1/repressTime:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
 edgeRepressor(end-length(reducVec)+1:end)=fliplr(reducVec);
-tempe=HB-repmat(mean(HB(:,[1:ms20,end-ms20:end]),2),1,size(HB,2));
+tempe=HB-repmat(mean(HB(:,[1:repressTime,end-repressTime:end]),2),1,size(HB,2));
 tempe=tempe.*repmat(edgeRepressor,size(HB,1),1);
 function MCG=makeMCGbyCh(temp,maxTemp,Rlims,Ipeaks,amp,lengt)
 MCG=zeros(size(temp,1),lengt);
@@ -750,8 +814,8 @@ for HBi=1:length(Ipeaks);
     s1=Ipeaks(HBi)+length(temp)-maxTemp;
     if sum(MCG(1,s0:s1))>0
         overlap=find(MCG(1,s0:s1),1,'last');
-        if overlap>0.2*size(temp,2)
-            endPrev=round(0.2*size(temp,2));
+        if overlap>maxTemp/2; % 0.2*size(temp,2)
+            endPrev=round(maxTemp/2); % round(0.2*size(temp,2));
         else
             endPrev=overlap;
         end
