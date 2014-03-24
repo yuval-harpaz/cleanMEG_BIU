@@ -117,8 +117,8 @@ dataFiltFreq=default('dataFiltFreq',[],cfg);
 matchMethod=default('matchMethod','xcorr',cfg);
 beforeHBs=default('beforeHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.3*period
 afterHBs=default('afterHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.7*period
-linThr=default('linThr',0.25,cfg);
-linThr=; % threshold for low amplitude HB, use average amplitude when below this ratio    
+ampLinThr=default('ampLinThr',0.25,cfg);  % threshold for low amplitude HB, use average amplitude when below this ratio   
+ 
 
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
@@ -558,9 +558,9 @@ end
 % if there are too many
 
 if posHB
-    negp=find(p(:,1)<linThr);
+    negp=find(p(:,1)<ampLinThr);
 else
-    negp=find(p(:,1)>linThr);
+    negp=find(p(:,1)>ampLinThr);
 end
 if ~isempty(negp)
     p(negp,1:2)=0;
