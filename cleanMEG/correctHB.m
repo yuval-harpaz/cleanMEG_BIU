@@ -52,9 +52,6 @@ function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions
 %  have jump artifact
 %  - cfg.peakFiltFreq ([7 90]) is the band-pass filter used for the meanMEG data, before peak
 % detection.
-%  - cfg.ampFiltFreq (2) is a high-pass or band-pass filter used to test R
-% peak amplitude. better use highpass only, although bp may improve linear
-% fit between (unfiltered) template and filtered data. 
 %  - cfg.tempFiltFreq (same as peakFiltFreq) is the filter used for
 %  meanMEG template and meanMEG before template match takes place. when
 %  T is large and R is small you may want to lower the highpass freq. It
@@ -63,12 +60,19 @@ function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions
 % the match between a template HB and meanMEG / ECG recording. you can also
 % use 'topo' and 'meanMEG' in order to define HB peaks on the topography
 % trace or the mean(MEG) channel.
-%  - cfg.afterHB (0.7) is how long the template should continue after the 
+%  - cfg.ampFiltFreq (2) is a high-pass or band-pass filter used to test R
+% peak amplitude. better use highpass only, although bp may improve linear
+% fit between (unfiltered) template and filtered data. 
+%  - cfg.ampLinThr (0.25) is linear regression r threshold. if there is no ggood
+%  fit between template QRS and an instance of a heart beat, amplitude will not
+%  be assesed by r, the average HB amp will be given.
+%  - cfg.afterHBs (0.7) is how long the template should continue after the 
 % peak (seconds)
-%  - cfg.beforeHB (70% of the period) is when the template should start before the 
+%  - cfg.beforeHBs (70% of the period) is when the template should start before the 
 % peak (seconds)
 %  - cfg.repressTime (ms) is how much of the template to repress to zero on
 %  the edges
+
 %
 % 4D users can run the function from the folder with the data ('c,*') file, with no
 % input arguments:
