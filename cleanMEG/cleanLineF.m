@@ -1,4 +1,4 @@
-function [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, mean0)
+function [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, mean0,startNum)
 %  clean the line frequency based on points at which the Mains flipped from
 %  negative to positive
 %    [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, Mean0);
@@ -16,6 +16,7 @@ function [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, mean0)
 %                       precession at each trig is considered
 % Mean0   - start from that mean.  If not available comput from 1-st 256
 %          cycles.
+% startNum- how many cycles to take for adaptive template
 %
 % cleaned - same dimension like dataA but cleaned from the line frequency
 %           artefact.
@@ -48,6 +49,12 @@ if nargin>3
                 Global=false; 
                 Adaptive = true;
                 phasePrecession = false;
+                if ~exist('startNum','var')
+                    startNum=[];
+                end
+                if isempty(startNum)
+                    startNum=256;
+                end
             case 3 % PhasePrecession
                 Global=false; 
                 Adaptive = false;
@@ -248,7 +255,7 @@ if Global
 elseif Adaptive
     %% generate a slowly changing average
     cleaned = dataA;
-    startNum=256;
+%    startNum=256;
     numCycles = length(whereUp);
     Q = 1-1/startNum;
     sum1 = zeros(1,maxL+1);
@@ -259,7 +266,7 @@ elseif Adaptive
         if sum(abs(mean0))==0, mean0=[]; end
     end
     %% compute a simple average
-    if isempty(mean0)  % compute for the firt 256
+    if isempty(mean0)  % compute for the first 256 (or startNum)
         for cycle = 1:startNum
             startCycle = whereUp(cycle);
             sum1 = sum1 + dataA(startCycle:startCycle+maxL);
@@ -287,6 +294,10 @@ elseif Adaptive
         else % extra cycles copy the previous one
             ml1(cycle,:)=ml1(cycle-1,:);  % copy the last one
         end
+    end
+    % BL correction for template
+    for tempi=1:size(ml1,1)
+        ml1(tempi,:)=ml1(tempi,:)-mean(ml1(tempi,:));
     end
     for ii=1:length(whereUp)-1
         iStrt = whereUp(ii);
