@@ -1,4 +1,4 @@
-function [cleanData,whereUp]=correctLF(data,sRate,chanLF,method,Lfreq,jobs)
+function [cleanData,whereUp]=correctLF(data,sRate,chanLF,method,Lfreq,jobs,hpFreq)
 %   -  data is MEG or EEG data, rows for channels
 %   -  sRate is sampling rate
 %   -  chanLF is a channel containing a lot of 50 or 60Hz, can be a MEG
@@ -10,6 +10,8 @@ function [cleanData,whereUp]=correctLF(data,sRate,chanLF,method,Lfreq,jobs)
 %   detected automatically
 %   - jobs is for parallel processing with parfor, a number of CPU to use.
 %   default uses all, take care.
+%   - hpFreq (0.1) means that you want to highpass filter the data before
+%   cleaning.
 % 4D users can run it as cleanData=LFcleanNoCue;
 %
 % Yuval Harpaz Jan 2014
@@ -20,6 +22,12 @@ if ~exist ('method','var')
 end
 if isempty(method)
     method='ADAPTIVE';
+end
+if ~ischar(method)
+    Ncycles=method;
+    method='ADAPTIVE';
+else
+    Ncycles=[];
 end
 if ~exist ('chanLF','var')
     chanLF=[];
@@ -34,6 +42,9 @@ if isempty(jobs)
     par=false;
 else
     par=true;
+end
+if ~exist('hpFreq','var')
+    hpFreq=[];
 end
 %% try to load data file and check if 4D-neuroimaging data
 
@@ -102,12 +113,22 @@ for chani=1:size(data,1)
         good(chani)=false; %#ok<AGROW>
     end
 end
-display('filtering and searching for line frequency')
 good=find(good);
+%% if requested make hp filter
+if ~isempty(hpFreq);
+    HighPassSpecObj=fdesign.highpass('Fst,Fp,Ast,Ap',0.001,hpFreq,60,1,sRate);%
+    HighPassFilt=design(HighPassSpecObj ,'butter');
+    % BL correction for 1st sec window to avoid ripples in the beginning
+    for chani=1:size(data,1)
+        data(chani,:)=data(chani,:)-mean(data(chani,1:round(sRate)));
+    end
+    data = myFilt(data,HighPassFilt);
+end
+%% test 50Hz or 60Hz
 display('computing fft')
 [Four,F]=fftBasic(data(good,:),round(sRate));
-%% test 50Hz or 60Hz
 if isempty(Lfreq);
+    display('filtering and searching for line frequency')
     [Lfreq,meanPSD]=findLfreq(Four,F);
     disp(['line frequency is ',num2str(Lfreq),'Hz'])
 else
@@ -118,7 +139,7 @@ else
     for chani=1:size(Four,1)
         FourScaled(chani,:)=abs(Four(chani,:))/scale(chani);
     end
-    meanPSD=mean(FourScaled);
+    meanPSD=mean(FourScaled,1);
 end
 %% find LF cycles on a filtered channel
 lookForLF=true;
@@ -289,24 +310,27 @@ if par
 end
 %% cleaning the data
 % estimate time
+%FIXME when only one or three channels don't estimate time
 tic
-cleanLineF(data(good(1),:), whereUp, [], upper(method));
+cleanLineF(data(good(1),:), whereUp, [], upper(method),[],Ncycles);
 time1st=toc;
 if par
-    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/jobs*2)),'min'])
+    timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs*2));
+    display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
 else
-    display(['cleaning channels one by one, wait about ',num2str(ceil(time1st*(length(good)-1)/60/1*2)),'min'])
+    timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/1*2));
+    display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
 end
 % do the cleaning
 cleanData=data(good,:);
 
 if par
     parfor chani=1:length(good)
-        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles);
     end
 else
     for chani=1:length(good)
-        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method));
+        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles);
     end
 end
 data(good,:)=cleanData;
@@ -315,8 +339,13 @@ cleanData=data;% sorry about this mess, the parfor made me do this
 clear data
 time2nd=toc;
 mins=time2nd/60;
+if floor(mins)>str2num(timeEstimate)
+    well='well, ';
+else
+    well='';
+end
 secs=60*(mins-floor(mins));
-display(['well, it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec']);
+display([well,'it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec']);
 disp('plotting')
 [Four,F]=fftBasic(cleanData(good,:),round(sRate));
 [~, i125] = min(abs(F-125)); % index for 125Hz
@@ -325,7 +354,7 @@ scale=mean(abs(Four(:,i125:i145)),2);
 for chani=1:size(Four,1)
     Four(chani,:)=abs(Four(chani,:))/scale(chani);
 end
-meanPSDclean=mean(Four);
+meanPSDclean=mean(Four,1);
 figure;
 plot(F,meanPSD,'r');
 hold on
@@ -347,7 +376,7 @@ scale=mean(abs(fourier(:,i125:i145)),2);
 for chani=1:size(fourier,1)
     fourier(chani,:)=abs(fourier(chani,:))/scale(chani);
 end
-meanPSD=mean(fourier); % power spectrum, averaged over channels
+meanPSD=mean(fourier,1); % power spectrum, averaged over channels
 [~, i50] = min(abs(freq-50));
 [~, i60] = min(abs(freq-60));
 
