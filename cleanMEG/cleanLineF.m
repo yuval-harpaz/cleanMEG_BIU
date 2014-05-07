@@ -295,6 +295,7 @@ elseif Adaptive
         noise=max(amp1); % to accept all segments
     end
     %% compute a simple average
+    noiseSamp=[];
     if isempty(mean0)  % compute for the first 256 (or startNum)
         %         for cycle = 1:startNum
         %             startCycle = whereUp(cycle);
@@ -307,7 +308,6 @@ elseif Adaptive
         %             noise=max(amp1); % to accept all segments
         %         end
         cycCount=0;
-        noiseSamp=[];
         for cycle = 1:startNum
             startCycle = whereUp(cycle);
             if mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))<=noise
