@@ -1,4 +1,4 @@
-function [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, mean0,startNum)
+function [cleaned, mean1,noiseSamp] = cleanLineF(dataA, whereUp, epochs, method, mean0,startNum,noiseThr)
 %  clean the line frequency based on points at which the Mains flipped from
 %  negative to positive
 %    [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, Mean0);
@@ -21,6 +21,9 @@ function [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, mean0,sta
 % cleaned - same dimension like dataA but cleaned from the line frequency
 %           artefact.
 % mean1   - the last mean used
+%
+% noiseThr- how many std(mean(abs(data of one cycle))) to consider as
+%           noise. default is 5 SD.
 
 %  Sep-2008  MA
 % UPDATES
@@ -28,6 +31,9 @@ function [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, mean0,sta
 %             Adapted for data composed of non-contiguos pieces
 %  Oct-2010  3 methods of cleaning added
 %  Feb-2011  Bugs in adaptive methods fixed
+%  Apr-2014  leave low frequencies in the data, reject noisy segments from
+%            template, allow choose startNum and more. see
+%            github/yuval-harpaz for all changes
 
 %% initialize
 if nargin>3
@@ -42,11 +48,11 @@ if nargin>3
     else
         switch(k)
             case 1  % GLOBAL
-                Global=true; 
+                Global=true;
                 Adaptive = false;
                 phasePrecession = false;
             case 2 % ADAPTIVE
-                Global=false; 
+                Global=false;
                 Adaptive = true;
                 phasePrecession = false;
                 if ~exist('startNum','var')
@@ -56,7 +62,7 @@ if nargin>3
                     startNum=256;
                 end
             case 3 % PhasePrecession
-                Global=false; 
+                Global=false;
                 Adaptive = false;
                 phasePrecession = true;
         end
@@ -94,7 +100,7 @@ else
 end
 if epoched && ~Global
     warning('MATLAB:MEGanalysis:ImproperCombination',...
-            'Data is epoched and only GLOBAL is allowed')
+        'Data is epoched and only GLOBAL is allowed')
     Global=true; % the default
     Adaptive = false;
     phasePrecession = false;
@@ -106,8 +112,15 @@ if epochS(1)>1
     numEpochs = length(epochS);
 end
 dW = diff(whereUp);
+if ~exist('noiseThr','var')
+    noiseThr=[];
+end
+if isempty(noiseThr)
+    noiseThr=5;
+end
 
-%% break by epochs bounderies
+
+%% Clean
 if Global
     if ~epoched
         meanL=round(mean(diff(whereUp)));
@@ -173,9 +186,10 @@ if Global
     meanLine = zeros(size(dataA,1),max(dW)+1);
     numData = zeros(1,max(dW)+1);
     lastDataSample = epochS(1)-1;
+    noiseSamp=[];
     for ii=kk:numEpochs
         if epochE(ii)-epochS(ii)>3*meanLapprox  % do not use too short pieces for meanLine
-            mL = oneLineCycle(dataA(:,(epochS(ii):epochE(ii))), ...
+            [mL,nSamp] = oneLineCycle(dataA(:,(epochS(ii):epochE(ii))), ...
                 whereUp((first(ii):last(ii)))-lastDataSample);
             numInThisMean  = size(mL,2);
             numData(1:numInThisMean) = numData(:,1:numInThisMean) +...
@@ -183,6 +197,7 @@ if Global
             meanLine(:,1:numInThisMean) = meanLine(:,1:numInThisMean) +...
                 (last(ii) -first(ii) +1)*mL;
             lastDataSample = epochE(ii);
+            noiseSamp=[noiseSamp,nSamp+epochS(ii)-1];
         end
     end
     extraI = find(numData==0,1);
@@ -255,7 +270,7 @@ if Global
 elseif Adaptive
     %% generate a slowly changing average
     cleaned = dataA;
-%    startNum=256;
+    %    startNum=256;
     numCycles = length(whereUp);
     Q = 1-1/startNum;
     sum1 = zeros(1,maxL+1);
@@ -265,13 +280,44 @@ elseif Adaptive
     else
         if sum(abs(mean0))==0, mean0=[]; end
     end
+    % Estimate Noise
+    for cycle = 1:(numCycles-2)
+        startCycle = whereUp(cycle);
+        amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); %#ok<AGROW>
+%         if ~isempty(find([startCycle:startCycle+maxL]==688726))
+%             display('noise')
+%         end
+    end
+    amp2=(amp1-mean(amp1))./std(amp1);
+    %cyci=find(amp2<noiseThr);
+    noise=min(amp1(amp2>=noiseThr));
+    if isempty(noise)
+        noise=max(amp1); % to accept all segments
+    end
     %% compute a simple average
     if isempty(mean0)  % compute for the first 256 (or startNum)
+        %         for cycle = 1:startNum
+        %             startCycle = whereUp(cycle);
+        %             amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); %#ok<AGROW>
+        %         end
+        %         amp2=(amp1-mean(amp1))./std(amp1);
+        %         cyci=find(amp2<noiseThr);
+        %         noise=min(amp1(amp2>=noiseThr));
+        %         if isempty(noise)
+        %             noise=max(amp1); % to accept all segments
+        %         end
+        cycCount=0;
+        noiseSamp=[];
         for cycle = 1:startNum
             startCycle = whereUp(cycle);
-            sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+            if mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))<=noise
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycCount=cycCount+1;
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; %#ok<*AGROW>
+            end
         end
-        ml1(1:startNum,:) = repmat(sum1/startNum,startNum,1);
+        ml1(1:startNum,:) = repmat(sum1/cycCount,startNum,1);
     else % mean0 was provided
         % check that OK
         r = size(mean0,1);
@@ -289,8 +335,14 @@ elseif Adaptive
     for cycle = startNum+1:numCycles
         startCycle = whereUp(cycle);
         if startCycle+maxL <= size(dataA,2)
-            ml1(cycle,:) = Q*ml1(cycle-1,:) + ...
-                dataA(startCycle:startCycle+maxL)/startNum;
+            if mean(abs(dataA(startCycle:startCycle+maxL)...
+                    -mean(dataA(startCycle:startCycle+maxL)))) <= noise
+                ml1(cycle,:) = Q*ml1(cycle-1,:) + ...
+                    dataA(startCycle:startCycle+maxL)/startNum;
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)];
+                ml1(cycle,:)=ml1(cycle-1,:);
+            end
         else % extra cycles copy the previous one
             ml1(cycle,:)=ml1(cycle-1,:);  % copy the last one
         end
@@ -309,7 +361,7 @@ elseif Adaptive
     if whereUp(1)>1  %header before first whereUp
         numInHeader = whereUp(1)-1;
         cleaned(1:numInHeader) = dataA(1:numInHeader)...
-                               - ml1(1,end-numInHeader+1:end);
+            - ml1(1,end-numInHeader+1:end);
     end
     if whereUp(end)<length(dataA) % tail after whereUp
         numInTail = length(dataA)-whereUp(end);

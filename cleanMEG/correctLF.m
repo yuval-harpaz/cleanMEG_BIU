@@ -1,4 +1,4 @@
-function [cleanData,whereUp]=correctLF(data,sRate,chanLF,method,Lfreq,jobs,hpFreq)
+function [cleanData,whereUp,noiseSamp]=correctLF(data,sRate,chanLF,method,Lfreq,jobs,hpFreq,noiseThr)
 %   -  data is MEG or EEG data, rows for channels
 %   -  sRate is sampling rate
 %   -  chanLF is a channel containing a lot of 50 or 60Hz, can be a MEG
@@ -12,6 +12,9 @@ function [cleanData,whereUp]=correctLF(data,sRate,chanLF,method,Lfreq,jobs,hpFre
 %   default uses all, take care.
 %   - hpFreq (0.1) means that you want to highpass filter the data before
 %   cleaning.
+%   - noiseThr is how many std(mean(abs(data of one cycle))) to consider as
+%   noise. default is 5 SD.
+
 % 4D users can run it as cleanData=LFcleanNoCue;
 %
 % Yuval Harpaz Jan 2014
@@ -38,13 +41,18 @@ end
 if ~exist('jobs','var')
     jobs=[];
 end
-if isempty(jobs)
-    par=false;
-else
-    par=true;
-end
 if ~exist('hpFreq','var')
     hpFreq=[];
+end
+if ~exist('noiseThr','var')
+    noiseThr=[];
+else
+    if ~strcmp(method,'ADAPTIVE')
+        warning('currently noiseThr only works for adaptive')
+    end
+end
+if isempty(noiseThr)
+    noiseThr=5;
 end
 %% try to load data file and check if 4D-neuroimaging data
 
@@ -103,9 +111,13 @@ if isempty(data) || exist('var4DfileName','var');
     end
     clear var4D*
 end
-
+if isempty(jobs) || size(data,1)==1
+    par=false;
+else
+    par=true;
+end
 %% find chans with no obvious problems and compute meanPSD
-display('looking for low information channels to be excluded')
+
 testSamp=min([round(sRate) size(data,2)]);
 for chani=1:size(data,1)
     good(chani)=true; %#ok<AGROW>
@@ -116,6 +128,7 @@ end
 good=find(good);
 %% if requested make hp filter
 if ~isempty(hpFreq);
+    display('filtering')
     HighPassSpecObj=fdesign.highpass('Fst,Fp,Ast,Ap',0.001,hpFreq,60,1,sRate);%
     HighPassFilt=design(HighPassSpecObj ,'butter');
     % BL correction for 1st sec window to avoid ripples in the beginning
@@ -126,7 +139,15 @@ if ~isempty(hpFreq);
 end
 %% test 50Hz or 60Hz
 display('computing fft')
-[Four,F]=fftBasic(data(good,:),round(sRate));
+% check size not to overload
+dSize=size(data,1)*size(data,2);
+if dSize>500000000
+    fftLength=round(500000000/size(data,1));
+    display(['lots of data, displaying fft only for about ',num2str(round(fftLength/sRate/60)),'min'])
+else
+    fftLength=size(data,2);
+end
+[Four,F]=fftBasic(data(good,1:fftLength),round(sRate));
 if isempty(Lfreq);
     display('filtering and searching for line frequency')
     [Lfreq,meanPSD]=findLfreq(Four,F);
@@ -141,6 +162,7 @@ else
     end
     meanPSD=mean(FourScaled,1);
 end
+display('done fft, preparing LF time indices')
 %% find LF cycles on a filtered channel
 lookForLF=true;
 
@@ -176,7 +198,7 @@ if lookForLF
         trigShift=zeros(size(chanLF));
         trigShift(2:end)=chanLF(1:end-1);
         trigShift=uint16(trigShift);
-        whereUp=find((chanLF-trigShift)>0);
+        whereUp=find((uint16(chanLF)-trigShift)>0);
         if max(diff(whereUp))>sRate/Lfreq+3 || min(diff(whereUp))<sRate/Lfreq-3
             warning('some triggers are at irregular times')
         end
@@ -241,14 +263,14 @@ end
 
 
 if whereUp(1)>(ceil(sRate/Lfreq)+1)
-     diary LFlog.txt
+    diary LFlog.txt
     warning('first LF index is away from the beginning, guessing first cycles')
     diary off
     firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
     whereUp=[firstInd(1:end-1),whereUp];
 end
 if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
-     diary LFlog.txt
+    diary LFlog.txt
     warning('last LF index is away from the end, guessing last cycles')
     diary off
     lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
@@ -310,44 +332,53 @@ if par
 end
 %% cleaning the data
 % estimate time
-%FIXME when only one or three channels don't estimate time
-tic
-cleanLineF(data(good(1),:), whereUp, [], upper(method),[],Ncycles);
-time1st=toc;
-if par
-    timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs*2));
-    display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
+if size(data,1)==1
+    [cleanData,~,nS]=cleanLineF(data, whereUp, [], upper(method),[],Ncycles,noiseThr);
+    noiseSamp{1,1}=nS;
+    clear data
 else
-    timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/1*2));
-    display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
-end
-% do the cleaning
-cleanData=data(good,:);
-
-if par
-    parfor chani=1:length(good)
-        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles);
+    tic
+    cleanLineF(data(good(1),:), whereUp, [], upper(method),[],Ncycles,noiseThr);
+    time1st=toc;
+    if par
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs*2));
+        display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
+    else
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/1*2));
+        display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
     end
-else
+    % do the cleaning
+    cleanData=data(good,:);
+    nSamp=cell(size(cleanData,1),1);
+    if par
+        parfor chani=1:length(good)
+            [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles,noiseThr);
+        end
+    else
+        for chani=1:length(good)
+            [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles,noiseThr);
+        end
+    end
+    data(good,:)=cleanData;
+    clear cleanData
+    cleanData=data;% sorry about this mess, the parfor made me do this
+    clear data
+    noiseSamp=cell(size(cleanData,1),1);
     for chani=1:length(good)
-        cleanData(chani,:)=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles);
+        noiseSamp{good(chani),1}=nSamp{chani,1};
     end
+    time2nd=toc;
+    mins=time2nd/60;
+    if floor(mins)>str2num(timeEstimate)
+        well='well, ';
+    else
+        well='';
+    end
+    secs=60*(mins-floor(mins));
+    display([well,'it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec']);
 end
-data(good,:)=cleanData;
-clear cleanData
-cleanData=data;% sorry about this mess, the parfor made me do this
-clear data
-time2nd=toc;
-mins=time2nd/60;
-if floor(mins)>str2num(timeEstimate)
-    well='well, ';
-else
-    well='';
-end
-secs=60*(mins-floor(mins));
-display([well,'it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec']);
 disp('plotting')
-[Four,F]=fftBasic(cleanData(good,:),round(sRate));
+[Four,F]=fftBasic(cleanData(good,1:fftLength),round(sRate));
 [~, i125] = min(abs(F-125)); % index for 125Hz
 [~, i145] = min(abs(F-145));
 scale=mean(abs(Four(:,i125:i145)),2);
@@ -368,6 +399,7 @@ if par
         end
     end
 end
+display('done cleaning LF')
 function [Lfreq,meanPSD]=findLfreq(fourier,freq)
 % [fourier,freq]=fftBasic(data,round(sRate));
 [~, i125] = min(abs(freq-125)); % index for 125Hz
