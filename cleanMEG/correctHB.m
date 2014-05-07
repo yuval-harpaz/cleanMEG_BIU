@@ -673,9 +673,9 @@ if figs
     end
 end
 avgHBclean=meanHB(data(:,sampBefore+1:end-sampBefore),sRate,HBtimes);
-figure;plot(avgTimes,avgHB,'r')
+figure;plot(avgTimes,mean(avgHB),'r')
 hold on
-plot(avgTimes,avgHBclean,'g')
+plot(avgTimes,mean(avgHBclean),'g')
 title('averaged heartbeat, before (red) and after')
 %display(['HB period (2nd sweep) is ',num2str(period4),'s']);
 if ~isempty(bads);
