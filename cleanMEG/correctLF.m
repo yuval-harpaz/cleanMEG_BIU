@@ -182,6 +182,15 @@ elseif ischar(chanLF)
         % cycleSamp=round(sRate/Lfreq)
         start=double(1):sRate/Lfreq:double(size(data,2));
         whereUp=round(start);
+%         if Ncycles>100
+%             cycCnt=0
+%             for c100i=1:100:(length(whereUp)-100)
+%                 cycCnt=cycCnt+1;
+%                 wuSeg=whereUp(c100i:(c100i+99));
+%                 meanLine = oneLineCycle(data(:,whereUp(c100i):whereUp(c100i+100)),wuSeg-whereUp(c100i)+1);
+%                 mlT(1:size(data,1),1:size(meanLine,2),cycCnt)=meanLine-repmat(mean(meanLine,2),1,size(meanLine,2));
+%             end
+%         end
         lookForLF=false;
     elseif strcmp(chanLF(end-3:end),'.mat')
         chanLF=load(['./',data]);
@@ -333,12 +342,14 @@ end
 %% cleaning the data
 % estimate time
 if size(data,1)==1
+    display('cleaning')
     [cleanData,~,nS]=cleanLineF(data, whereUp, [], upper(method),[],Ncycles,noiseThr);
     noiseSamp{1,1}=nS;
     clear data
 else
     tic
-    cleanLineF(data(good(1),:), whereUp, [], upper(method),[],Ncycles,noiseThr);
+    cleanData=data(good,:);
+    cleanData(1,:)=cleanLineF(data(good(1),:), whereUp, [], upper(method),[],Ncycles,noiseThr);
     time1st=toc;
     if par
         timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs*2));
@@ -348,14 +359,13 @@ else
         display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
     end
     % do the cleaning
-    cleanData=data(good,:);
     nSamp=cell(size(cleanData,1),1);
     if par
-        parfor chani=1:length(good)
+        parfor chani=2:length(good)
             [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles,noiseThr);
         end
     else
-        for chani=1:length(good)
+        for chani=2:length(good)
             [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineF(cleanData(chani,:), whereUp, [], upper(method),[],Ncycles,noiseThr);
         end
     end
