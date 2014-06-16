@@ -3,7 +3,12 @@ function [meanLine,noiseSamp,cycCount] = oneLineCycle(dataA, whereUp,noiseThr)
 % meanLine = oneLineCycle(dataA, whereUp);
 % dataA    - nChannelsXmSamples
 % whereUp  - list of indices where the 50Hz goes up
+% noiseThr - noise Threshold in z scores
+
 % meanLine - the mean triggered on the 50hz up stroke
+% noiseSamp- are samples which are members of noisy cycles
+% cycCount - the number of good cycles
+
 
 % Sep-2008  MA
 % May-2014  YH added noise rejection

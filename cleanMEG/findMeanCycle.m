@@ -32,7 +32,7 @@ sumV = zeros(1,numSamples);
 numAveraged = sumV;
 
 %% compute the soum over 3 cycles
-for trigNo = 2:length(whereUp)-3
+for trigNo = 3:length(whereUp)-3
     trig0 = trigNo-1;
     trig3 = trigNo+2;
     phase0 = phaseAtTrig(trig0)-pi2;
