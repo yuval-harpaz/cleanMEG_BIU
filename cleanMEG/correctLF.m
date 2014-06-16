@@ -659,7 +659,8 @@ elseif fitSize
     cleaned = zeros(size(dataA));
     %% get the mean signal per line cycle
     [meanLine,noiseSamp] = oneLineCycleInternal(dataA,whereUp,noiseType,noiseThr,cycLength);
-    meanLine=meanLine-mean(meanLine(1:cycLength));
+    %meanLine=meanLine-mean(meanLine(1:cycLength));
+    meanLine=meanLine-meanLine(1);
     % find zero crossing in template
     t1=meanLine(1:end-1);
     t2=meanLine(2:end);
@@ -722,7 +723,7 @@ elseif fitSize
             end
         end
         Artifact(iStrt:iEnds)=artifact;
-        cleaned(:,iStrt:iEnds) = dataA(:,iStrt:iEnds)-artifact;
+        cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
     end
     % subtract the leftover tail
     if epochE>iEnds  ; %clean the tail
