@@ -500,13 +500,13 @@ elseif Adaptive
         numInHeader = whereUp(1)-1;
         artifact=ml1(1,end-numInHeader+1:end);
         cleaned(1:numInHeader) = dataA(1:numInHeader)-artifact;
-        Artifact(iStrt:iEnds)=artifact;
+        Artifact(1:numInHeader)=artifact;
     end
     if whereUp(end)<length(dataA) % tail after whereUp
         numInTail = length(dataA)-whereUp(end);
         artifact=ml1(end, end-numInTail:end)
         cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
-        Artifact(iStrt:iEnds)=artifact;
+        Artifact(end-numInTail:end)=artifact;
     end
     mean1 = ml1(end,:);
 elseif phasePrecession
