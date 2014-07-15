@@ -491,7 +491,7 @@ elseif Adaptive
         iStrt = whereUp(ii);
         iEnds = whereUp(ii+1) -1;
         numInThisCycle = iEnds-iStrt+1;
-        artifact=ml1(ii,1:numInThisCycle)
+        artifact=ml1(ii,1:numInThisCycle);
         cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
         Artifact(iStrt:iEnds)=artifact;
     end
@@ -504,7 +504,7 @@ elseif Adaptive
     end
     if whereUp(end)<length(dataA) % tail after whereUp
         numInTail = length(dataA)-whereUp(end);
-        artifact=ml1(end, end-numInTail:end)
+        artifact=ml1(end, end-numInTail:end);
         cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
         Artifact(end-numInTail:end)=artifact;
     end
