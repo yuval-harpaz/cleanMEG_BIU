@@ -234,7 +234,8 @@ BandPassFilt=design(BandPassSpecObj ,'butter');
 meanMEGf = myFilt(meanMEG,BandPassFilt);
 % baseline correction again, just in case
 meanMEGf=meanMEGf-median(meanMEGf);
-
+meanMEGf(1:sampBefore)=0;
+meanMEGf(end-sampBefore+1:end)=0;
 %% look for a noisy segment and noisy channels
 % find bad channels, has to be noisy for 3 of the first 3 seconds
 stdMEG=std(data(:,1:round(sRate))');
@@ -289,6 +290,8 @@ if isempty(ECG)
     meanMEG=double(mean(data));
     meanMEGf = myFilt(meanMEG,BandPassFilt);
     meanMEGf=meanMEGf-median(meanMEGf);
+    meanMEGf(1:sampBefore)=0;
+    meanMEGf(end-sampBefore+1:end)=0;
 end
 %% peak detection on MCG (or ECG) signal
 disp('looking for HB peaks')

@@ -1,69 +1,69 @@
-function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,method,Lfreq,jobs,hpFreq,noiseType,noiseThr,dbg)
+function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
+
 %   -  data is MEG or EEG data, rows for channels
 %   -  sRate is sampling rate
 %   -  chanLF is a channel containing a lot of 50 or 60Hz, can be a MEG
-% reference channel or leave empty to detect high LF chan automatically.
+% reference channel or leave empty to detect high LF chan automatically. it
+% can also be the index of your dirty channel.
 % you can also give 'time', the consequence is that LF will not be searched
+% but averaging will be based on fixed latencies (20ms for 50Hz artifact).
+
+%   -  cfg is an optional structure with the following possible fields
 % on any channel, but will be guessed according to time only. requires Lfreq and works with ADAPTIVE method.
-%   -  method is 'GLOBAL' 'ADAPTIVE' (default), see cleanLineF for more on
+%   -  cfg.method is 'GLOBAL' 'ADAPTIVE' (default), see cleanLineF for more on
 %   that. use FITSIZE method in extremely variable artifact (moving rats).
 %   ADAPTIVE1 is similar to adaptive in createCleanFile, where the
-%   averaging is different (see tal & Abeles, 2013). you can use Adaptive
-%   with N cylces per average, by giving a number instead of 'ADATIVE'
-%   (default is 4000).
-%   -  Lfreq is the noise frequency, 50 or 60. by default the Lfreq is
+%   averaging is different (see tal & Abeles, 2013).
+%   -  cfg.Ncycles is required for ADAPTIVE and ADAPTIVE1, how many cycles
+%   to average to create a template. 4000 has no over cleaning (notch) which is good,
+%   but some artofact may remain. I wouldn't use less than 256 cycles.
+%   -  cfg.Lfreq is the noise frequency, 50 or 60. by default the Lfreq is
 %   detected automatically
-%   - jobs is for parallel processing with parfor, a number of CPU to use.
+%   - cfg.jobs is for parallel processing with parfor, a number of CPU to use.
 %   default uses all, take care.
-%   - hpFreq (0.1) means that you want to highpass filter the data before
+%   - cfg.hpFreq (0.1) means that you want to highpass filter the data before
 %   cleaning.
-%   - noiseType is 'samp' or 'cyc', to test noise sample by sample or cycle by cycle
-%   - noiseThr is how many std(mean(abs(data of one cycle))) to consider as
+%   - cfg.noiseType is 'samp' or 'cyc', to test noise sample by sample or cycle by cycle
+%   - cfg.noiseThr is how many std(mean(abs(data of one cycle))) to consider as
 %   noise. default is 5 SD.
 
-% 4D users can run it as cleanData=LFcleanNoCue;
+% examples:
+%
+% cleanData=correctLF('data.mat',1017.25,trig);
+% where trig is a channel recording the power line zero crossing, 1017.25
+% is the sampling rate in data.mat you have a matrix with rows for channels
+%
+% cleanData=correctLF(EEGdata,1000);
+% Here we find which EEG channel has most power line artifact and zero
+% crossing is assessed for it.
+%
+% cleanData=correctLF;4D MEG users with no 50Hz recording can run it as  it
+% will find the REF channel with most 50Hz (or 60) and clean the rest. to
+% save it to 4D file format use rewrite_pdf(cleanData).
+%
+% cleanData=correctLF('data.mat',1017.25,trig);
+% where trig is a channel recording the power line zero crossing, 1017.25
+% is the sampling rate in data.mat you have a matrix with rows for channels
+%
 %
 % Yuval Harpaz Jan 2014
 
 %% set defaults
-if ~exist ('method','var')
-    method=[];
+if ~exist ('chanLF','var')
+    chanLF=[];
 end
-if isempty(method)
-    method='ADAPTIVE';
-end
-if ~ischar(method)
-    Ncycles=method;
-    method='ADAPTIVE';
-else
-    Ncycles=[];
-end
+Lfreq=default('Lfreq',[],cfg); % test if 50 or 60Hz
+method=default('method','ADAPTIVE',cfg); %average 
+Ncycles=default('Ncycles',4000,cfg);
+jobs=default('jobs',[],cfg); % no parallel processing
+hpFreq=default('hpFreq',[],cfg); % no high pass filter
+noiseThr=default('noiseThr',5,cfg); % 5 SD as noise threshold
+noiseType=default('noiseType','samp',cfg); % tests noise by sample
+
 if strcmpi(method,'FITSIZE')
     lookForLag=true;
 else
     lookForLag=false;
-    lag=zeros(1,size(data,1));
-end
-if ~exist ('chanLF','var')
-    chanLF=[];
-end
-if ~exist('Lfreq','var')
-    Lfreq=[];
-end
-if ~exist('jobs','var')
-    jobs=[];
-end
-if ~exist('hpFreq','var')
-    hpFreq=[];
-end
-if ~exist('noiseThr','var')
-    noiseThr=[];
-end
-if isempty(noiseThr)
-    noiseThr=5;
-end
-if ~exist('noiseType','var')
-    noiseType='samp';
 end
 
 %% try to load data file and check if 4D-neuroimaging data
@@ -126,7 +126,6 @@ if isempty(jobs) || size(data,1)==1
 else
     par=true;
 end
-cycLength=round(sRate/Lfreq);
 %% find chans with no obvious problems and compute meanPSD
 
 testSamp=min([round(sRate) size(data,2)]);
@@ -222,6 +221,7 @@ if lookForLF
         whereUp=find(whereUp);
     end
 end
+cycLength=round(sRate/Lfreq);
 %% check that whereUp is OK. if not, find cycles by template matching
 cycInterval=1000*mean(diff(whereUp))/sRate;
 if ~round(cycInterval)==1000/Lfreq
@@ -246,11 +246,7 @@ if ~isempty(badCue)
     end
     temp=mean(temp,1);
     display('matching template 50Hz to trace to find zero crossing')
-    if ~dbg
-        [snr,signal]=match_temp(chanLFhp,temp,1);
-    else
-        load mch
-    end
+    [snr,signal]=match_temp(chanLFhp,temp,1);
     [~, IpeaksPos]=findPeaks(signal,0,round(0.75*length(temp))); % no peaks closer than 60% of period
     [~, IpeaksNeg]=findPeaks(-signal,0,round(0.75*length(temp)));
     if std(diff(IpeaksPos))<std(diff(IpeaksNeg))
@@ -338,6 +334,7 @@ if par
 end
 %% cleaning the data
 % estimate zero crossing on averaged cycle
+lag=zeros(1,size(data,1));
 if lookForLag % for FITSIZE
     for chani=1:size(data,1)
         meanLine=oneLineCycleInternal(data(chani,:),whereUp,noiseType,noiseThr,cycLength);
@@ -796,7 +793,7 @@ elseif Adaptive
                 noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; %#ok<*AGROW>
             end
         end
-        ml1(1:startNum,:) = repmat(sum1/cycCount,startNum,1);
+        ml1(1:cycle,:) = repmat(sum1/cycCount,cycle,1);
     else % mean0 was provided
             error('no mean0 allowed')
     end  % end of getting the first startNum averages
@@ -840,11 +837,11 @@ elseif Adaptive
         numInHeader = whereUp(1)-1;
         artifact=ml1(1,end-numInHeader+1:end);
         cleaned(1:numInHeader) = dataA(1:numInHeader)-artifact;
-        Artifact(iStrt:iEnds)=artifact;
+        Artifact(1:numInHeader)=artifact;
     end
     if whereUp(end)<length(dataA) % tail after whereUp
         numInTail = length(dataA)-whereUp(end);
-        artifact=ml1(end, end-numInTail:end)
+        artifact=ml1(end, end-numInTail:end);
         cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
         Artifact(end-numInTail:end)=artifact;
     end
@@ -940,13 +937,13 @@ elseif Adaptive
         numInHeader = whereUp(1)-1;
         artifact=ml1(1,end-numInHeader+1:end);
         cleaned(1:numInHeader) = dataA(1:numInHeader)-artifact;
-        Artifact(iStrt:iEnds)=artifact;
+        Artifact(1:numInHeader)=artifact;
     end
     if whereUp(end)<length(dataA) % tail after whereUp
         numInTail = length(dataA)-whereUp(end);
-        artifact=ml1(end, end-numInTail:end)
+        artifact=ml1(end, end-numInTail:end);
         cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
-        Artifact(iStrt:iEnds)=artifact;
+        Artifact(end-numInTail:end)=artifact;
     end
     mean1 = ml1(end,:);
 elseif phasePrecession
@@ -1092,4 +1089,9 @@ end
 %% wrap up
 xClean = xInt(1:10:end);
 mean1 = mean3cycles;
-
+function variable=default(field,value,cfg)
+if isfield(cfg,field)
+    eval(['variable=cfg.',field,';'])
+else
+    variable=value;
+end
