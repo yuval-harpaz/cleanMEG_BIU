@@ -52,6 +52,9 @@ function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
 if ~exist ('chanLF','var')
     chanLF=[];
 end
+if ~exist('cfg','var')
+    cfg={};
+end
 Lfreq=default('Lfreq',[],cfg); % test if 50 or 60Hz
 method=default('method','ADAPTIVE',cfg); %average 
 Ncycles=default('Ncycles',4000,cfg);
