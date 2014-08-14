@@ -109,7 +109,11 @@ sMEG = conv(QRS,mMEGf);
 sMEG = sMEG(range:end-range+1);
 % we assume that QRS is pointing up!
 [amplitudes, Ipeaks] = findPeaks(sMEG,numSD,thirdBeat); % find peaks >4*sd of signal
-[amplitudesN, IpeaksN] = findPeaks(-sMEG,numSD,thirdBeat); % find negative peaks
+try
+    [amplitudesN, IpeaksN] = findPeaks(-sMEG,numSD,thirdBeat); % find negative peaks
+catch
+    amplitudesN=0; % no negative peaks
+end
 if mean(amplitudesN) > mean(amplitudes) % invert
     amplitudes = amplitudesN;
     Ipeaks = IpeaksN;

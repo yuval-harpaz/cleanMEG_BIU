@@ -1,5 +1,7 @@
 function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
 
+% [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg);
+% see more examples below
 %   -  data is MEG or EEG data, rows for channels
 %   -  sRate is sampling rate
 %   -  chanLF is a channel containing a lot of 50 or 60Hz, can be a MEG
@@ -7,7 +9,6 @@ function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
 % can also be the index of your dirty channel.
 % you can also give 'time', the consequence is that LF will not be searched
 % but averaging will be based on fixed latencies (20ms for 50Hz artifact).
-
 %   -  cfg is an optional structure with the following possible fields
 % on any channel, but will be guessed according to time only. requires Lfreq and works with ADAPTIVE method.
 %   -  cfg.method is 'GLOBAL' 'ADAPTIVE' (default), see cleanLineF for more on
@@ -26,7 +27,6 @@ function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
 %   - cfg.noiseType is 'samp' or 'cyc', to test noise sample by sample or cycle by cycle
 %   - cfg.noiseThr is how many std(mean(abs(data of one cycle))) to consider as
 %   noise. default is 5 SD.
-
 % examples:
 %
 % cleanData=correctLF('data.mat',1017.25,trig);
@@ -56,8 +56,12 @@ if ~exist('cfg','var')
     cfg={};
 end
 Lfreq=default('Lfreq',[],cfg); % test if 50 or 60Hz
-method=default('method','ADAPTIVE',cfg); %average 
-Ncycles=default('Ncycles',4000,cfg);
+method=default('method','ADAPTIVE',cfg); %average
+if isfield(cfg,'Ncycle') % spelling error
+    Ncycles=default('Ncycle',4000,cfg);
+else
+    Ncycles=default('Ncycles',4000,cfg);
+end
 jobs=default('jobs',[],cfg); % no parallel processing
 hpFreq=default('hpFreq',[],cfg); % no high pass filter
 noiseThr=default('noiseThr',5,cfg); % 5 SD as noise threshold
@@ -452,7 +456,7 @@ elseif meanPSD(i60)>meanPSD(i50) && snr60>2
 else
     plot(freq,meanPSD)
     title('Power Spectrum averaged over channels')
-    error('cannot makeup my mind if thhere is 50 or 60 Hz artifact')
+    error('cannot makeup my mind if thhere is 50 or 60 Hz artifact. you can state it in cfg.Lfreq=50;')
 end
 function maxChani=findchanLF(fourier,freq,Lfreq)
 [~, i125] = min(abs(freq-125)); % index for 125Hz
@@ -744,7 +748,7 @@ elseif fitSize
     end
     mean1 = meanLine;
 elseif Adaptive
-    %% similar to adaptive but makes an average of last 4000 (startNum) cycles. not as good for an unknown reason.
+    %% similar to adaptive1 but makes an average of last 4000 (startNum) cycles. not as good for an unknown reason.
     cleaned = dataA;
     %    startNum=4000;
     %    startNum=256;

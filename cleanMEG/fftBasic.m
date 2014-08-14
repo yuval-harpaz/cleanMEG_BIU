@@ -15,7 +15,7 @@ for seci=1:NFFT:(size(rows,2))
         try % should fail for too short, end of the rows
         secCount=secCount+1;
         if keepSegments
-            Y(:,secCount)=fft(rows(:,seci:seci+NFFT)',NFFT);
+            Y(:,:,secCount)=fft(rows(:,seci:seci+NFFT)',NFFT);
         else
             Y = Y+fft(rows(:,seci:seci+NFFT)',NFFT);
         end
@@ -29,9 +29,13 @@ else % short data, less than a second
     NFFT=size(rows,2);
     Y=fft(rows',NFFT);
 end
-fourier=Y(1:floor(NFFT/2)+1,:);
+fourier=Y(1:floor(NFFT/2)+1,:,:);
 freq = Fs/2*linspace(0,1,NFFT/2+1);
-fourier=fourier';
+if keepSegments
+    fourier=permute(fourier,[2,1,3]);
+else
+    fourier=fourier';
+end
 freq=freq(2:end);
-fourier=fourier(:,2:end);
+fourier=fourier(:,2:end,:);
 end
