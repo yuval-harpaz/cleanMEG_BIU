@@ -717,7 +717,7 @@ end
 HB=HB/epochi;
 period4=[]; %#ok<NASGU>
 HBxc=xcorr(HB);
-[~,ipxc]=findPeaks(HBxc,1.5,sRate*period*0.6); % index peak xcorr
+[~,ipxc]=findPeaks(HBxc,1.5,sRate*maxPeriod*0.6); % index peak xcorr
 if length(ipxc)>1
     nextPeak=ceil(length(ipxc)/2+0.5);
     period4=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
@@ -750,7 +750,7 @@ if length(ipxc)>1
         period4=median(difs(difs/sRate<maxPeriod))/sRate;
     else
         HBxc1=xcorr(trace,HB);
-        [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
+        [~,ipxc]=findPeaks(HBxc1,1.5,sRate*maxPeriod*0.6); % index peak xcorr
         period4=median(diff(ipxc))/sRate;
     end
 else
