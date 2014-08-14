@@ -590,7 +590,7 @@ sAft=length(temp2e)-maxi;
 HBtemp=HBbyChan(data,sRate,Ipeaks2in,sBef,sAft);
 % check SNR per chan
 sm50=round(sRate*0.05);
-s0=max(maxi-sm50*3,0);
+s0=max(maxi-sm50*3,1);
 s1=maxi-sm50;
 s2=maxi+sm50;
 n=std(HBtemp(:,s0:s1)'); %#ok<*UDIM>
