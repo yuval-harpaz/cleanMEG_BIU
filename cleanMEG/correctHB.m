@@ -590,7 +590,7 @@ sAft=length(temp2e)-maxi;
 HBtemp=HBbyChan(data,sRate,Ipeaks2in,sBef,sAft);
 % check SNR per chan
 sm50=round(sRate*0.05);
-s0=maxi-sm50*3;
+s0=max(maxi-sm50*3,0);
 s1=maxi-sm50;
 s2=maxi+sm50;
 n=std(HBtemp(:,s0:s1)'); %#ok<*UDIM>
@@ -649,14 +649,19 @@ else
     scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(data(:,sampBefore+1:sampBefore+round(sRate*5)))));
     plot(time,meanMEG/scale,'k')
 end
+set(gca,'fontname','times','fontsize',15)
 hold on
 plot(time,meanData,'r')
 plot(time,mean(data),'g')
+xlabel({'Time (s)',' '})
+ylabel('Amplitude (T)')
 if isempty(ECG)
-    legend('MCG from template', 'mean MEG','mean clean MEG')
+    lg=legend('MCG from template', 'mean MEG','mean clean MEG')
 else
-    legend('rescaled ECG', 'mean MEG','mean clean MEG')
+    lg=legend('rescaled ECG', 'mean MEG','mean clean MEG')
 end
+set(lg,'box','off')
+box off
 Rtopo=HBtemp(:,maxi);
 if figs
     if isfield(figOptions,'layout')
@@ -677,9 +682,14 @@ if figs
 end
 avgHBclean=meanHB(data(:,sampBefore+1:end-sampBefore),sRate,HBtimes);
 figure;plot(avgTimes,mean(avgHB),'r')
+set(gca,'fontname','times','fontsize',15)
 hold on
 plot(avgTimes,mean(avgHBclean),'g')
 title('averaged heartbeat, before (red) and after')
+box off
+xlabel({'Time (s)',' '})
+ylabel('Amplitude (T)')
+xlim([-0.7 0.7])
 %display(['HB period (2nd sweep) is ',num2str(period4),'s']);
 if ~isempty(bads);
     data(:,bads)=badData;
