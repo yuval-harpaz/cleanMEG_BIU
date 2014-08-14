@@ -656,9 +656,9 @@ plot(time,mean(data),'g')
 xlabel({'Time (s)',' '})
 ylabel('Amplitude (T)')
 if isempty(ECG)
-    lg=legend('MCG from template', 'mean MEG','mean clean MEG')
+    lg=legend('MCG from template', 'mean MEG','mean clean MEG');
 else
-    lg=legend('rescaled ECG', 'mean MEG','mean clean MEG')
+    lg=legend('rescaled ECG', 'mean MEG','mean clean MEG');
 end
 set(lg,'box','off')
 box off
