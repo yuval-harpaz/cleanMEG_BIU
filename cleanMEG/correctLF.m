@@ -551,6 +551,7 @@ if nargin>3
         phasePrecession = false;
         fitSize=false;
         Adaptive1 = false;
+        Adaptive2=false;
         switch(k)
             case 1  % GLOBAL
                 Global=true;
