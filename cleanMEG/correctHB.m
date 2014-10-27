@@ -332,7 +332,7 @@ end
 if figs
     if isfield(figOptions,'layout') && isfield(figOptions,'label')
         topo={};
-        topo.avg=median(data(:,Ipeaks),2);
+        topo.avg=double(median(data(:,Ipeaks),2));
         topo.time=0;
         topo.label=figOptions.label;
         topo.dimord='chan_time';
@@ -665,7 +665,7 @@ box off
 Rtopo=HBtemp(:,maxi);
 if figs
     if isfield(figOptions,'layout')
-        topo.avg=Rtopo;
+        topo.avg=double(Rtopo);
         cfgp.xlim=[1,1];
         if strcmp(cfgp.layout,'neuromag306mag.lay')
             cfgp.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
