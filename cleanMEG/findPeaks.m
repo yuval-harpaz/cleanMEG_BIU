@@ -1,9 +1,10 @@
 function [peaks, Ipeaks] = findPeaks(x,th, deadT)
 % find all peaks in x
-% [peaks, Ipeaks] = findPeaks(x,th);
+% [peaks, Ipeaks] = findPeaks(x,th,deadT);
 %
 % x      - column vector
-% th     - consider only peaks which are above  th*std
+% th     - consider only peaks which are above  th*std. when th is text it can also be
+% percentile (e.g. '%95') or a fixed value (e.g. 'v0.0007')
 % deadT  - minimal number of samples between succesive peaks.  When closer
 %          choose the bigest. [default 0];
 % peaks  - values of peaks
@@ -52,12 +53,28 @@ end
 
 %% lint the peaks according to size and dead time
 peaks = x(Ipeaks);
-if th>0
+if ischar(th)
+    if strcmp(th(1),'%') % percentile
+        percentile = prctile(x,str2double(th(2:end)));
+        smallP = find(peaks<percentile);
+        peaks(smallP)=[];
+        Ipeaks(smallP)=[];
+    elseif strcmp(th(1),'v') % fixed value, in volt or whatever unit x has
+        smallP = find(peaks<str2num(th(2:end)));
+        peaks(smallP)=[];
+        Ipeaks(smallP)=[];
+    else
+        error ('text threshold can only start with % or v')
+    end
+elseif th>0
     sd =stdWnan(x);
     mn=meanWnan(x);
     smallP = find(peaks<(mn+th*sd));
     peaks(smallP)=[];
     Ipeaks(smallP)=[];
+end
+if isempty(Ipeaks)
+    return
 end
 if deadT>1
     eliminate = true;  % initial start
