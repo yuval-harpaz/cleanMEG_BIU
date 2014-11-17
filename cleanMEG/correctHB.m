@@ -234,8 +234,7 @@ BandPassFilt=design(BandPassSpecObj ,'butter');
 meanMEGf = myFilt(meanMEG,BandPassFilt);
 % baseline correction again, just in case
 meanMEGf=meanMEGf-median(meanMEGf);
-meanMEGf(1:sampBefore)=0;
-meanMEGf(end-sampBefore+1:end)=0;
+
 %% look for a noisy segment and noisy channels
 % find bad channels, has to be noisy for 3 of the first 3 seconds
 stdMEG=std(data(:,1:round(sRate))');
@@ -290,8 +289,6 @@ if isempty(ECG)
     meanMEG=double(mean(data));
     meanMEGf = myFilt(meanMEG,BandPassFilt);
     meanMEGf=meanMEGf-median(meanMEGf);
-    meanMEGf(1:sampBefore)=0;
-    meanMEGf(end-sampBefore+1:end)=0;
 end
 %% peak detection on MCG (or ECG) signal
 disp('looking for HB peaks')
@@ -332,7 +329,7 @@ end
 if figs
     if isfield(figOptions,'layout') && isfield(figOptions,'label')
         topo={};
-        topo.avg=double(median(data(:,Ipeaks),2));
+        topo.avg=median(data(:,Ipeaks),2);
         topo.time=0;
         topo.label=figOptions.label;
         topo.dimord='chan_time';
@@ -402,7 +399,7 @@ IpeaksR=Ipeaks(r>0.5);
 IpeaksR=IpeaksR(IpeaksR>sampBefore);
 IpeaksR=IpeaksR(IpeaksR<(size(data,2)-sampBefore));
 period2=diff(IpeaksR)/sRate; % estimate period
-period2=median(period2(period2<2)); % less than 2s
+period2=median(period2(period2<maxPeriod)); % less than 2s
 
 %LowPassSpecObj=fdesign.lowpass('Fp,Fst,Ap,Ast',45,55,1,60,sRate);
 if tempFiltFreq==peakFiltFreq
@@ -590,7 +587,7 @@ sAft=length(temp2e)-maxi;
 HBtemp=HBbyChan(data,sRate,Ipeaks2in,sBef,sAft);
 % check SNR per chan
 sm50=round(sRate*0.05);
-s0=max(maxi-sm50*3,1);
+s0=maxi-sm50*3;
 s1=maxi-sm50;
 s2=maxi+sm50;
 n=std(HBtemp(:,s0:s1)'); %#ok<*UDIM>
@@ -649,23 +646,18 @@ else
     scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(data(:,sampBefore+1:sampBefore+round(sRate*5)))));
     plot(time,meanMEG/scale,'k')
 end
-set(gca,'fontname','times','fontsize',15)
 hold on
 plot(time,meanData,'r')
 plot(time,mean(data),'g')
-xlabel({'Time (s)',' '})
-ylabel('Amplitude (T)')
 if isempty(ECG)
-    lg=legend('MCG from template', 'mean MEG','mean clean MEG');
+    legend('MCG from template', 'mean MEG','mean clean MEG')
 else
-    lg=legend('rescaled ECG', 'mean MEG','mean clean MEG');
+    legend('rescaled ECG', 'mean MEG','mean clean MEG')
 end
-set(lg,'box','off')
-box off
 Rtopo=HBtemp(:,maxi);
 if figs
     if isfield(figOptions,'layout')
-        topo.avg=double(Rtopo);
+        topo.avg=Rtopo;
         cfgp.xlim=[1,1];
         if strcmp(cfgp.layout,'neuromag306mag.lay')
             cfgp.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
@@ -682,14 +674,9 @@ if figs
 end
 avgHBclean=meanHB(data(:,sampBefore+1:end-sampBefore),sRate,HBtimes);
 figure;plot(avgTimes,mean(avgHB),'r')
-set(gca,'fontname','times','fontsize',15)
 hold on
 plot(avgTimes,mean(avgHBclean),'g')
 title('averaged heartbeat, before (red) and after')
-box off
-xlabel({'Time (s)',' '})
-ylabel('Amplitude (T)')
-xlim([-0.7 0.7])
 %display(['HB period (2nd sweep) is ',num2str(period4),'s']);
 if ~isempty(bads);
     data(:,bads)=badData;
@@ -717,7 +704,7 @@ end
 HB=HB/epochi;
 period4=[]; %#ok<NASGU>
 HBxc=xcorr(HB);
-[~,ipxc]=findPeaks(HBxc,1.5,sRate*maxPeriod*0.6); % index peak xcorr
+[~,ipxc]=findPeaks(HBxc,1.5,sRate*period*0.6); % index peak xcorr
 if length(ipxc)>1
     nextPeak=ceil(length(ipxc)/2+0.5);
     period4=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
@@ -750,7 +737,7 @@ if length(ipxc)>1
         period4=median(difs(difs/sRate<maxPeriod))/sRate;
     else
         HBxc1=xcorr(trace,HB);
-        [~,ipxc]=findPeaks(HBxc1,1.5,sRate*maxPeriod*0.6); % index peak xcorr
+        [~,ipxc]=findPeaks(HBxc1,1.5,sRate*period*0.6); % index peak xcorr
         period4=median(diff(ipxc))/sRate;
     end
 else
@@ -890,8 +877,8 @@ else
 end
 function [p,Rlims]=assessAmp(temp2e,maxi,Ipeaks2in,meanMEG)
 %[~,maxi]=max(temp2e(1:round(length(temp2e/2))));
-bef=find(fliplr(temp2e(1:maxi))<0,1)-1;
-aft=find(temp2e(maxi:end)<0,1)-1;
+bef=find(fliplr(temp2e(1:maxi))<=0,1)-1;
+aft=find(temp2e(maxi:end)<=0,1)-1;
 Rlims=[maxi-bef,maxi+aft]; % check where R pulls the template above zero
 for HBi=1:length(Ipeaks2in);
     s0=Ipeaks2in(HBi)-bef;
