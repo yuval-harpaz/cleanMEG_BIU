@@ -29,6 +29,8 @@ function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
 %   'median' (default), 'mean' or [time0 time1] to remove mean of a certain time window.
 %   - cfg.BLfreq ([125 145]) is the limits of baseline frequencies by which to
 %   normalize the fft when plotting. does not change the cleaning itself.
+%   - cfg.reverse (false) is for running the cleaning forward and reverse in
+%   order to clean the beginning of the file better
 % examples:
 %
 % cleanData=correctLF('data.mat',1017.25,trig);
@@ -70,6 +72,7 @@ noiseThr   =default('noiseThr',5,cfg); % 5 SD as noise threshold
 noiseType  =default('noiseType','samp',cfg); % tests noise by sample
 blc        =default('blc','median',cfg);
 BLfreq        =default('BLfreq',[125 145],cfg);
+reverse        =default('reverse','false',cfg);
 if strcmpi(method,'FITSIZE')
     lookForLag=true;
 else
@@ -393,12 +396,30 @@ if size(data,1)==1
     wu=wu(wu<size(data,2));
     [cleanData,~,nS,Artifact]=cleanLineFinternal(data, wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
     noiseSamp{1,1}=nS;
+    if reverse
+        temp=cleanLineFinternal(fliplr(data), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+        temp=fliplr(temp);
+        rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+        rev2=size(data,2)-rev1+1;
+        cleanData(1,1:rev1)=temp(1:rev1);
+        cleanData(1,rev1+1:rev2-1)=(cleanData(1,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+    end
     clear data
 else
     Artifact='only applies for one channel analysis';
+    
     tic
     cleanData=data(good,:);
+    nSamp=cell(size(cleanData,1),1);
     [cleanData(1,:),~,nSamp{chani,1}]=cleanLineFinternal(data(good(1),:), whereUp, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+    if reverse
+        temp=cleanLineFinternal(fliplr(data(good(1),:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+        temp=fliplr(temp);
+        rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+        rev2=size(data,2)-rev1+1;
+        cleanData(1,1:rev1)=temp(1:rev1);
+        cleanData(1,rev1+1:rev2-1)=(cleanData(1,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+    end
     time1st=toc;
     if par
         timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs*2));
@@ -408,13 +429,23 @@ else
         display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
     end
     % do the cleaning
-    nSamp=cell(size(cleanData,1),1);
+    
     if par
         parfor chani=2:length(good)
             wu=whereUp+lag(chani);
             wu=wu(wu>0);
             wu=wu(wu<size(data,2));
             [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+            if reverse
+                fowAndRev=cleanData(chani,:);
+                temp=cleanLineFinternal(fliplr(data(chani,:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+                temp=fliplr(temp);
+                rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+                rev2=size(data,2)-rev1+1;
+                fowAndRev(1:rev1)=temp(1:rev1);
+                fowAndRev(rev1+1:rev2-1)=(fowAndRev(rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+                cleanData(chani,:)=fowAndRev;
+            end
         end
     else
         for chani=2:length(good)
@@ -422,6 +453,14 @@ else
             wu=wu(wu>0);
             wu=wu(wu<size(data,2));
             [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+            if reverse
+                temp=cleanLineFinternal(fliplr(data(chani,:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+                temp=fliplr(temp);
+                rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+                rev2=size(data,2)-rev1+1;
+                cleanData(chani,1:rev1)=temp(1:rev1);
+                cleanData(chani,rev1+1:rev2-1)=(cleanData(chani,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+            end
         end
     end
     data(good,:)=cleanData;
@@ -444,8 +483,8 @@ else
 end
 disp('plotting')
 [Four,F]=fftBasic(cleanData(good,1:fftLength),round(sRate));
-[~, BLfreq1i] = min(abs(F-125)); % index for 125Hz
-[~, BLfreq2i] = min(abs(F-145));
+% [~, BLfreq1i] = min(abs(F-125)); % index for 125Hz
+% [~, BLfreq2i] = min(abs(F-145));
 %scale=mean(abs(Four(:,BLfreq1i:BLfreq2i)),2);
 for chani=1:size(Four,1)
     Four(chani,:)=abs(Four(chani,:))/scale(chani);

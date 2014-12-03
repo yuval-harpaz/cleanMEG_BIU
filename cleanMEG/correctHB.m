@@ -1,4 +1,4 @@
-function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
+function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 
 % - data is a matrix with rows for channels, raw data, not filtered. it can
 % also be a filename.mat, directing to data matrix file, or a 4D filename such
@@ -66,12 +66,12 @@ function [data,HBtimes,temp2e,period4,MCG,Rtopo]=correctHB(data,sRate,figOptions
 %  - cfg.ampLinThr (0.25) is linear regression r threshold. if there is no ggood
 %  fit between template QRS and an instance of a heart beat, amplitude will not
 %  be assesed by r, the average HB amp will be given.
-%  - cfg.afterHBs (0.7) is how long the template should continue after the 
+%  - cfg.afterHBs (0.7 of the period) is how long the template should continue after the 
 % peak (seconds)
-%  - cfg.beforeHBs (70% of the period) is when the template should start before the 
+%  - cfg.beforeHBs (0.3 of the period) is when the template should start before the 
 % peak (seconds)
-%  - cfg.repressTime (ms) is how much of the template to repress to zero on
-%  the edges
+%  - cfg.repressTime (20ms) is how much of the template to repress to zero on
+%  the edges (ms)
 
 %
 % 4D users can run the function from the folder with the data ('c,*') file, with no
@@ -524,14 +524,14 @@ else
 end
 % make mcg trace for meanMEG
 if posHB
-    [temp2e,period4]=makeTempHB(meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime);
+    [templateHB,Period]=makeTempHB(meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime);
 else
-    [temp2e,period4]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime);
+    [templateHB,Period]=makeTempHB(-meanMEG,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime);
 end
 
-%maxi=round(0.3*length(temp2e))+1;
-maxi=round(beforeHBs*period4*sRate)+1;
-[~,mi]=max(temp2e(maxi-round(sRate/100):maxi+round(sRate/100)));
+%maxi=round(0.3*length(templateHB))+1;
+maxi=round(beforeHBs*Period*sRate)+1;
+[~,mi]=max(templateHB(maxi-round(sRate/100):maxi+round(sRate/100)));
 maxi=maxi-round(sRate/100)+mi-1;
 %% test R amplitude
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
@@ -557,7 +557,7 @@ else
     error('wrong length of vector. one number (2) means hp filter, two ([2 90]) means bp')
 end
 
-[p,Rlims]=assessAmp(temp2e,maxi,Ipeaks2in,meanMEGampF);
+[p,Rlims]=assessAmp(templateHB,maxi,Ipeaks2in,meanMEGampF);
 % look for neg correlation between template peak and peaks, means trouble
 % if there are too many
 
@@ -572,18 +572,18 @@ if ~isempty(negp)
     warning(['did not get good fit for amplitude test, assume average HB amplitude at ',num2str(time(Ipeaks2in(negp)))])
     diary off
 end
-ampMMfit=p(:,1)+(p(:,2)./temp2e(maxi));
+ampMMfit=p(:,1)+(p(:,2)./templateHB(maxi));
 if posHB
-    MCG=makeMCG(temp2e,maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
+    MCG=makeMCG(templateHB,maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
 else
-    MCG=makeMCG(temp2e,maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
+    MCG=makeMCG(templateHB,maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
     MCG=-MCG;
 end
 
 %% remove mcg from each chan
 %make temp per chan
 sBef=maxi-1;
-sAft=length(temp2e)-maxi;
+sAft=length(templateHB)-maxi;
 HBtemp=HBbyChan(data,sRate,Ipeaks2in,sBef,sAft);
 % check SNR per chan
 sm50=round(sRate*0.05);
@@ -684,7 +684,21 @@ end
 % plot avg HB before and after
 
 data=data(:,sampBefore+1:end-sampBefore);
-
+%% sanity check
+[~,t0]=max(diff(smooth(templateHB,20)));
+if t0>round(sRate/2)
+    diary('HBlog.txt')
+    txt=['insane, max(diff(templateHB)) is far, ',num2str(round(1000*t0/sRate)),'ms. Is it HeartBeat at all?!?\n'];
+    fprintf(2,txt);
+    diary('off')
+end
+EK=kurtosis(xcorr(templateHB))-3; %excess kurtosis of autocorrelation should be high
+if EK <3
+    txt='insane, repetitive pattern, is it HeartBeat? not Alpha?!?\n';
+    diary('HBlog.txt')
+    fprintf(2,txt);
+    diary off
+end
 
 %% internal functions
 function [tempe,period4]=makeTempHB(trace,sRate,peakIndex,period,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime)
@@ -802,7 +816,7 @@ for epochi=1:length(peakIndex)
     HB=HB+trace(:,peakIndex(epochi)-sampBefore:peakIndex(epochi)+sampAfter);
 end
 HB=HB/epochi;
-% reduce edges to vero
+% reduce edges to zero
 edgeRepressor=ones(1,size(HB,2));
 repressTime=round(sRate/50);
 reducVec=0:1/repressTime:1;
@@ -875,15 +889,15 @@ else
     xcrPad(Rsamp:end)=xcr(1:end-Rsamp+1);
     xcr=xcrPad; % sorry for switching variables
 end
-function [p,Rlims]=assessAmp(temp2e,maxi,Ipeaks2in,meanMEG)
-%[~,maxi]=max(temp2e(1:round(length(temp2e/2))));
-bef=find(fliplr(temp2e(1:maxi))<=0,1)-1;
-aft=find(temp2e(maxi:end)<=0,1)-1;
+function [p,Rlims]=assessAmp(templateHB,maxi,Ipeaks2in,meanMEG)
+%[~,maxi]=max(templateHB(1:round(length(templateHB/2))));
+bef=find(fliplr(templateHB(1:maxi))<=0,1)-1;
+aft=find(templateHB(maxi:end)<=0,1)-1;
 Rlims=[maxi-bef,maxi+aft]; % check where R pulls the template above zero
 for HBi=1:length(Ipeaks2in);
     s0=Ipeaks2in(HBi)-bef;
     s1=Ipeaks2in(HBi)+aft;
-    x=temp2e(Rlims(1):Rlims(2));
+    x=templateHB(Rlims(1):Rlims(2));
     y=meanMEG(s0:s1);
     scalef=-round(log10(max([x,y]))); % scaling factor for polyfit not to complain
     x=x*10^scalef;
