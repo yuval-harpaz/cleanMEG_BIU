@@ -1,56 +1,87 @@
 function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
-
 % [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg);
 % see more examples below
-%   -  data is MEG or EEG data, rows for channels
-%   -  sRate is sampling rate
-%   -  chanLF is a channel containing a lot of 50 or 60Hz, can be a MEG
-% reference channel or leave empty to detect high LF chan automatically. it
-% can also be the index of your dirty channel.
-% you can also give 'time', the consequence is that LF will not be searched
-% but averaging will be based on fixed latencies (20ms for 50Hz artifact).
-%   -  cfg is an optional structure with the following possible fields
-% on any channel, but will be guessed according to time only. requires Lfreq and works with ADAPTIVE method.
-%   -  cfg.method is 'GLOBAL' 'ADAPTIVE' (default, see tal & Abeles, 2013). use FITSIZE method in extremely variable artifact (moving rats).
-%   ADAPTIVE1 is moving a sliding window averager.
-%   -  cfg.Ncycles is required for ADAPTIVE and ADAPTIVE1, how many cycles
-%   to average to create a template. 4000 has no over cleaning (notch) which is good,
-%   but some artofact may remain. I wouldn't use less than 256 cycles.
-%   -  cfg.Lfreq is the noise frequency, 50 or 60. by default the Lfreq is
-%   detected automatically
-%   - cfg.jobs is for parallel processing with parfor, a number of CPU to use.
-%   default uses all, take care.
-%   - cfg.hpFreq (0.1) means that you want to highpass filter the data before
-%   cleaning.
-%   - cfg.noiseType is 'samp' or 'cyc', to test noise sample by sample or cycle by cycle
-%   - cfg.noiseThr is how many std(mean(abs(data of one cycle))) to consider as
-%   noise. default is 5 SD.
-%   - cfg.blc is baseline correction before work on data. it can be 'none',
-%   'median' (default), 'mean' or [time0 time1] to remove mean of a certain time window.
-%   - cfg.BLfreq ([125 145]) is the limits of baseline frequencies by which to
-%   normalize the fft when plotting. does not change the cleaning itself.
-%   - cfg.reverse (false) is for running the cleaning forward and reverse in
-%   order to clean the beginning of the file better
-% examples:
+%
+%% Cleaning line frequencies (LF) from MEG / EEG data without filters
+% The function detects zero crossing of power line artifact cycles (of 50 or 60Hz)
+% and averages the cycles. This average serves as a template noise pattern.
+% Subtracting it from each cycle removes the 50Hz artifact and its harmonics (100, 150, 200...)
+%
+%% Input
+% 4D users can use the function without input arguments. It find the
+% current 'c,*', finds the sampling rate, and detects 50Hz cycles on a ref
+% channel. Use input arguments when not using default parameters.
+%
+%   -  data is MEG or EEG data, rows for channels.
+%      it can be a 4D filename 'c,rfhp0.1Hz', a saved data matrix 'data.mat'.
+%      or the data matrix itself (less RAM friendly).
+%   -  sRate is sampling rate.
+%   -  chanLF is a channel containing detectable 50 or 60Hz. It can be an
+%      MEG reference channel. Leave empty to detect the noisiest channel
+%      automatically. It can be the index of your dirty channel, when this
+%      is one of the channels you want to clean. When the line frequency is
+%      hard to detect on any channel use chanLF='time'. LF cycles will not be
+%      searched for in the data. Averaging will be based on fixed latencies
+%      (20ms for 50Hz artifact). This is best used with low Ncycles (250).
+%   -  cfg is an optional structure with the following possible fields:
+%       *   cfg.method is 'GLOBAL' or 'ADAPTIVE' (default, see tal & Abeles, 2013).
+%           ADAPTIVE allows the shape of the 50Hz artifact to slowly change
+%           along the recording. GLOBAL assumes steady artifact, good for
+%           short recordings.'FITSIZE' can be used in extreme cases (moving
+%           rats), take care there. 'ADAPTIVE1' is moving a sliding window,
+%           averager. It seems to be less effective than ADAPTIVE.
+%       *   cfg.Ncycles can be used with ADAPTIVE and ADAPTIVE1, specifying
+%           how many cycles to average for creating a template. 4000 has no
+%           over cleaning (notch) at all, which is good. but some artifact may remain.
+%           I wouldn't use less than 250 cycles, because it may result in a
+%           50Hz notch. default is 400.
+%       *   cfg.Lfreq is the noise frequency, 50 or 60. by default the Lfreq is
+%           detected automatically.
+%       *   cfg.jobs is for parallel processing with parfor, the number of
+%           CPU to use.
+%       *   cfg.hpFreq is the low cutoff of a highpass filter. This means
+%           that you want to filter the data before cleaning. cfg.hpFreq=0.1
+%           is recommended good for DC recordings.
+%       *   cfg.noiseType is 'samp' (default) or 'cyc', to test noise sample by
+%           sample or cycle by cycle. noisy samples or cycles are cleaned,
+%           but their data is not used when creating the noise template.
+%           'samp' is not efficient when you have a lot of low freq noise
+%           (unfiltered DC recording).
+%       *   cfg.noiseThr is how many SD for a channel to consider as noise threshold.
+%           When cfg.noiseType='cyc', SD is std(mean(abs(data of one cycle))).
+%       *   cfg.blc is baseline correction before work on data. it can be 'none',
+%           'median' (default), 'mean' or [time0 time1] to remove the mean of a
+%           certain time window.
+%       *   cfg.BLfreq ([125 145]) is the limits of baseline frequencies by which to
+%           normalize the fft when plotting. does not change the cleaning itself.
+%           This was added for neuromag, to integrate mag and grad channels.
+%       *   cfg.reverse is for running the cleaning forward and reverse in
+%           order to clean the beginning of the file better, where you
+%           cannot clean adaptively using only forward sweap. default is
+%           false.
+%
+%% Output
+%   -   cleanData is what it is
+%   -   whereUp is a vector with samples where zero crossing was detected
+%   -   noiseSamp samples where noise was detected
+%   -   Artifact possible for one channel data only, it is the estimated
+%       artifact (chained templates)
+%% Examples
 %
 % cleanData=correctLF('data.mat',1017.25,trig);
-% where trig is a channel recording the power line zero crossing, 1017.25
-% is the sampling rate in data.mat you have a matrix with rows for channels
+% where trig is a digital channel recording the power line zero crossing, 1017.25
+% is the sampling rate. In data.mat you have a matrix with rows for channels
 %
 % cleanData=correctLF(EEGdata,1000);
 % Here we find which EEG channel has most power line artifact and zero
 % crossing is assessed for it.
 %
-% cleanData=correctLF;4D MEG users with no 50Hz recording can run it as  it
-% will find the REF channel with most 50Hz (or 60) and clean the rest. to
-% save it to 4D file format use rewrite_pdf(cleanData).
-%
-% cleanData=correctLF('data.mat',1017.25,trig);
-% where trig is a channel recording the power line zero crossing, 1017.25
-% is the sampling rate in data.mat you have a matrix with rows for channels
+% cleanData=correctLF; 4D MEG users. it will find the REF channel with most 50Hz
+% (or 60) and clean the MEG. to save it to 4D file format use rewrite_pdf(cleanData).
 %
 %
-% Yuval Harpaz Jan 2014
+% Yuval Harpaz Dec 2014
+
 
 %% set defaults
 if ~exist ('chanLF','var')
@@ -60,7 +91,7 @@ if ~exist('cfg','var')
     cfg={};
 end
 Lfreq      =default('Lfreq',[],cfg); % test if 50 or 60Hz
-method     =default('method','ADAPTIVE1',cfg); %average
+method     =default('method','ADAPTIVE',cfg); %average
 if isfield(cfg,'Ncycle') % spelling error
     Ncycles=default('Ncycle',400,cfg);
 else
@@ -137,7 +168,11 @@ end
 if isempty(jobs) || size(data,1)==1
     par=false;
 else
-    par=true;
+    if jobs>1
+        par=true;
+    else
+        par=false;
+    end
 end
 %% find chans with no obvious problems and compute meanPSD
 
@@ -243,6 +278,7 @@ if ~round(cycInterval)==1000/Lfreq
 end
 badCue=find(diff(whereUp)>1.2*sRate/Lfreq); %#ok<EFIND>
 if ~isempty(badCue)
+    whereUpOld=whereUp;
     % try matching a template
     Fp1=round(Lfreq*0.67);  % 34Hz highpass
     Fp2=round(Lfreq*2.33); % 117Hz low pass
@@ -275,21 +311,27 @@ if ~isempty(badCue)
     if whereUp(1)<1
         whereUp=whereUp(2:end);
     end
+    badCueTemp=find(diff(whereUp)>ceil(1.3*sRate/Lfreq));
+    if length(badCueTemp)>1.1*length(badCue)
+        disp('template match did not do good, reverting to previous whereUp')
+        whereUp=whereUpOld;
+    end
 end
+
 cycInterval=1000*mean(diff(whereUp))/sRate;
 if ~round(cycInterval)==1000/Lfreq
     error('whereUp has wrong frequency')
 end
 if whereUp(1)>(ceil(sRate/Lfreq)+1)
     diary LFlog.txt
-    warning('first LF index is away from the beginning, guessing first cycles')
+    disp('first LF index is away from the beginning, guessing first cycles')
     diary off
     firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
     whereUp=[firstInd(1:end-1),whereUp];
 end
 if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
     diary LFlog.txt
-    warning('last LF index is away from the end, guessing last cycles')
+    disp('last LF index is away from the end, guessing last cycles')
     diary off
     lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
     whereUp=[whereUp,lastInd(2:end)];
@@ -342,7 +384,7 @@ if par
                 matlabpool close
                 %matlabpool('local',jobs);
                 matlabpool ('open', jobs)
-            catch
+            catch %#ok<*CTCH>
                 jobs=1;
                 warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
             end
@@ -371,10 +413,10 @@ elseif size(blc,1)*size(blc,2)==2
     for chani=1:size(data,1)
         data(chani,:)=data(chani,:)-mean(data(chani,blc0:blc1));
     end
-end    
+end
 %% cleaning the data
 % estimate zero crossing on averaged cycle
-lag=zeros(1,size(data,1));
+lag=zeros(1,size(data,1)); % not zero for FITSIZE method
 if lookForLag % for FITSIZE
     for chani=1:size(data,1)
         meanLine=oneLineCycleInternal(data(chani,:),whereUp,noiseType,noiseThr,cycLength);
@@ -408,10 +450,12 @@ if size(data,1)==1
 else
     Artifact='only applies for one channel analysis';
     
-    tic
+    
     cleanData=data(good,:);
     nSamp=cell(size(cleanData,1),1);
+    tic
     [cleanData(1,:),~,nSamp{chani,1}]=cleanLineFinternal(data(good(1),:), whereUp, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+    time1st=toc;
     if reverse
         temp=cleanLineFinternal(fliplr(data(good(1),:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
         temp=fliplr(temp);
@@ -419,14 +463,15 @@ else
         rev2=size(data,2)-rev1+1;
         cleanData(1,1:rev1)=temp(1:rev1);
         cleanData(1,rev1+1:rev2-1)=(cleanData(1,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+        time1st=time1st*2;
     end
-    time1st=toc;
+    
     if par
-        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs*2));
-        display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs));
+        display(['cleaning ',num2str(length(good)),' channels in parallel, wait about ',timeEstimate,'min'])
     else
-        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/1*2));
-        display(['cleaning channels one by one, wait about ',timeEstimate,'min'])
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/1));
+        display(['cleaning ',num2str(length(good)),' channels one by one, wait about ',timeEstimate,'min. channel '])
     end
     % do the cleaning
     
@@ -461,6 +506,7 @@ else
                 cleanData(chani,1:rev1)=temp(1:rev1);
                 cleanData(chani,rev1+1:rev2-1)=(cleanData(chani,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
             end
+            progNum(chani);
         end
     end
     data(good,:)=cleanData;
@@ -479,8 +525,10 @@ else
         well='';
     end
     secs=60*(mins-floor(mins));
-    display([well,'it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec']);
+    txt=['\n',well,'it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec\n'];
+    fprintf(txt);
 end
+%% plotting results
 disp('plotting')
 [Four,F]=fftBasic(cleanData(good,1:fftLength),round(sRate));
 % [~, BLfreq1i] = min(abs(F-125)); % index for 125Hz
@@ -504,8 +552,9 @@ if par
     end
 end
 display('done cleaning LF')
+%% Functions
 function [Lfreq,meanPSD]=findLfreq(fourier,freq)
-% [fourier,freq]=fftBasic(data,round(sRate));
+% finds if there is more 50 or 60Hz in the data.
 [~, BLfreq1i] = min(abs(freq-125)); % index for 125Hz
 [~, BLfreq2i] = min(abs(freq-145));
 scale=mean(abs(fourier(:,BLfreq1i:BLfreq2i)),2);
@@ -527,17 +576,17 @@ else
     title('Power Spectrum averaged over channels')
     error('cannot makeup my mind if thhere is 50 or 60 Hz artifact. you can state it in cfg.Lfreq=50;')
 end
+
 function maxChani=findchanLF(fourier,freq,Lfreq)
+% finds which channel has most power-line artifact
 [~, BLfreq1i] = min(abs(freq-125)); % index for 125Hz
 [~, BLfreq2i] = min(abs(freq-145));
 [~, iLF] = min(abs(freq-Lfreq));
 scale=mean(abs(fourier(:,BLfreq1i:BLfreq2i)),2);
 [~,maxChani]=max(abs(fourier(:,iLF))./scale); %round(freq)==Lfreq
 
-%% internal version of cleanLineF
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [cleaned, mean1,noiseSamp,Artifact] = cleanLineFinternal(dataA, whereUp, epochs, method, mean0,startNum,noiseType,noiseThr,sRate,cycLength)
+%% internal version of cleanLineF.m
 %  clean the line frequency based on points at which the Mains flipped from
 %  negative to positive
 %    [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, Mean0);
@@ -566,17 +615,7 @@ function [cleaned, mean1,noiseSamp,Artifact] = cleanLineFinternal(dataA, whereUp
 %           noise. default is 5 SD.
 % sRate - needed for filter in FITSIZE method
 
-%  Sep-2008  MA
-% UPDATES
-%  Dec-2008  cycle end is considered by meanL and not maxL  MA
-%             Adapted for data composed of non-contiguos pieces
-%  Oct-2010  3 methods of cleaning added
-%  Feb-2011  Bugs in adaptive methods fixed
-%  Apr-2014  leave low frequencies in the data, reject noisy segments from
-%            template, allow choose startNum and more. see
-%            github/yuval-harpaz for all changes
-
-%% initialize
+% initialize
 if size(dataA,1)>1
     error('one channel only')
 end
@@ -687,7 +726,7 @@ if isempty(fitSize)
     fitSize=false;
 end
 
-%% Clean
+% Clean
 Artifact=zeros(size(dataA));
 if Global
     if ~epoched
@@ -699,16 +738,15 @@ if Global
         meanLapprox = round(mean(diff(whereUp)));  % temporary evaluation of a cycle
         shortEpoch = false;
         noUpInEpoch = false;
-        % lastCycleStart = whereUp(end);
     else % consider only whereUp with complete cycles at each epoch
         error('no support for epoched, use createCleanFile');
     end
     % lastCycleStart  = whereUp(end);
     cleaned = zeros(size(dataA));
     
-    %% get the mean signal per line cycle
+    % get the mean signal per line cycle
     [meanLine,noiseSamp] = oneLineCycleInternal(dataA,whereUp,noiseType,noiseThr,cycLength);
-    %% subtract from signal one cycle at a time
+    % subtract from signal one cycle at a time
     for ii=1:length(whereUp)-1
         iStrt = whereUp(ii);
         iEnds = whereUp(ii+1) -1;
@@ -739,15 +777,13 @@ elseif fitSize
     first=1;
     last = length(whereUp)-1;
     cleaned = zeros(size(dataA));
-    %% get the mean signal per line cycle
+    % get the mean signal per line cycle
     [meanLine,noiseSamp] = oneLineCycleInternal(dataA,whereUp,noiseType,noiseThr,cycLength);
-    %meanLine=meanLine-mean(meanLine(1:cycLength));
     meanLine=meanLine-meanLine(1);
     % find zero crossing in template
     t1=meanLine(1:end-1);
     t2=meanLine(2:end);
     tt=t1.*t2;
-    %indx=find(tt<0)
     dt        = t2-t1;
     indx_up   = find( (tt<0) & (dt>0) ) ;
     indx_down = find( (tt<0) & (dt<0) ) ;
@@ -773,7 +809,7 @@ elseif fitSize
     if meanL>numInThisCycle
         cleaned(:,epochS:firstCycleStart-1) = dataA(:,epochS:firstCycleStart-1)...
             - meanLine(:,(meanL-numInThisCycle):meanL-1);
-        iEnds = thisWhereUp; %?????????????
+        iEnds = thisWhereUp;
     end
     for ii=1:length(thisWhereUp)-1
         iStrt = thisWhereUp(ii);
@@ -795,7 +831,6 @@ elseif fitSize
                 x=rs(1,indx_down_rs+1:indx_up_rs);
                 y=dataAhp(:,iStrt+indx_down_rs+1:iStrt+indx_up_rs);
                 pD=polyfit(x,y,1);
-                %
                 if pU(1)>0.5 && pU(1)<1.5
                     artifact(1:indx_down_rs)=pU(1)*rs(1,1:indx_down_rs);%+pHP(2);1,1:indx_down);
                 end
@@ -825,7 +860,7 @@ elseif fitSize
         end
     end
     mean1 = meanLine;
-    elseif Adaptive
+elseif Adaptive
     %% generate a slowly changing average
     cleaned = dataA;
     %    startNum=256;
@@ -852,8 +887,7 @@ elseif fitSize
     elseif strcmp(noiseType,'samp')
         noise=std(dataA)*noiseThr;
     end
-    
-    %% compute a simple average
+    % compute a simple average
     noiseSamp=[];
     if isempty(mean0)  % compute for the first 256 (or startNum)
         cycCount=0;
@@ -932,10 +966,7 @@ elseif phasePrecession
 elseif Adaptive1
     %% similar to adaptive but makes an average of last 2000 and next 2000 (Ncycles/2) cycles. not as good for an unknown reason.
     cleaned = dataA;
-    %    startNum=4000;
-    %    startNum=256;
     numCycles = length(whereUp);
-    %Q = 1-1/startNum;
     sum1 = zeros(1,maxL+1);
     ml1 = nan(numCycles,maxL +1);
     if ~exist('mean0', 'var')
@@ -959,7 +990,6 @@ elseif Adaptive1
     end
     %% compute a simple average
     noiseSamp=[];
-    %prev=[];
     if isempty(mean0)  % compute for the first 256 (or startNum)
         cycCount=0;
         cycle=0;
@@ -969,15 +999,9 @@ elseif Adaptive1
             if strcmp(noiseType,'cyc') && mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))<=noise
                 sum1 = sum1 + dataA(startCycle:startCycle+maxL);
                 cycle=cyc+1;
-%                 if isempty(prev)
-%                     prev=dataA(startCycle:startCycle+maxL);
-%                 end
             elseif strcmp(noiseType,'samp') && sum(abs((dataA(startCycle:startCycle+maxL)))>=noise)==0
                 sum1 = sum1 + dataA(startCycle:startCycle+maxL);
                 cycCount=cycCount+1;
-%                 if isempty(prev)
-%                     prev=dataA(startCycle:startCycle+maxL);
-%                 end
             else
                 noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; %#ok<*AGROW>
             end
@@ -985,7 +1009,7 @@ elseif Adaptive1
         currentCycle=cycle-floor(startNum/2);
         ml1(1:currentCycle,:) = repmat(sum1/cycCount,currentCycle,1);
     else % mean0 was provided
-            error('no mean0 allowed')
+        error('no mean0 allowed')
     end  % end of getting the first startNum averages
     % continue in adaptive way
     for cycle = cycle+1:numCycles
@@ -1042,8 +1066,9 @@ else
     error('MATLAB:MEGanalysis:unknownParam','method was not defined')
 end
 
-%% internal version of oneLineCycle
 function [meanLine,noiseSamp,cycCount] = oneLineCycleInternal(dataA, whereUp,noiseType,noiseThr,cycLength)
+%% internal version of oneLineCycle
+%
 % average all cycles of 50Hz
 %
 % dataA    - nChannelsXmSamples
@@ -1058,7 +1083,7 @@ function [meanLine,noiseSamp,cycCount] = oneLineCycleInternal(dataA, whereUp,noi
 
 % Sep-2008  MA
 % May-2014  YH added noise rejection
-%% initialize
+% initialize
 if ~exist('noiseThr','var')
     noiseThr=[];
 end
@@ -1066,11 +1091,9 @@ if isempty(noiseThr)
     noiseThr=5;
 end
 
-%maxL = max(diff(whereUp));
 maxL=round(1.25*cycLength);
 [nChannels,mSamples] = size(dataA);
-numCycles = length(whereUp)-2;%floor(mSamples/maxL)-1;
-% numCycles=1000;
+numCycles = length(whereUp)-2;
 sum1 = zeros(nChannels,maxL+1);
 % Estimate noise
 if strcmp(noiseType,'cyc')
@@ -1116,12 +1139,12 @@ elseif strcmp(noiseType,'samp')
 end
 meanLine = sum1/cycCount;
 function  [xClean, mean1,Artifact] = cleanWphaseInternal(x,whereUp,interpNo)
-% clean periodic signal from x, allow phase precession
+%% clean periodic signal from x, allow phase precession
 
 
 % Oct-2010  MA
 
-%% initialize
+% initialize
 if ~exist('interpNo','var'), interpNo=[]; end
 if isempty(interpNo), interpNo = 10; end
 
@@ -1129,11 +1152,11 @@ xInt = interp(x,interpNo);
 whereUpInt = interpNo*(whereUp-1) +1;
 
 
-%% find the mean
+% find the mean
 [phasePerSample, phaseAtTrig] = findPhasePrecession(whereUpInt);
 [mean3cycles, zeroAt] = findMeanCycle(xInt, whereUpInt, 1);
 
-%% clean 1 cycle at a time
+% clean 1 cycle at a time
 Artifact=zeros(size(x));
 for iTrig = 1:length(whereUp)-1
     xI0 = whereUpInt(iTrig);
@@ -1149,7 +1172,7 @@ for iTrig = 1:length(whereUp)-1
 end
 
 
-%% treat the edges
+% treat the edges
 % the beginning
 if whereUpInt(1)>1
     xI0 = 1;
@@ -1174,10 +1197,12 @@ if whereUpInt(end)<length(xInt)
     Artifact(xI0:xI1)=mean3cycles(i0:i1);
 end
 
-%% wrap up
+% wrap up
 xClean = xInt(1:10:end);
 mean1 = mean3cycles;
+
 function variable=default(field,value,cfg)
+%% set default parameters
 if isfield(cfg,field)
     eval(['variable=cfg.',field,';'])
 else
