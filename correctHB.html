@@ -325,7 +325,7 @@ posHB=true;
     plot(time(Ipeaks), peaks,<span class="string">'ro'</span>)
     title(<span class="string">'Peak detection on mean MEG (or ECG) trace, OK if many of them are not HB'</span>)
 <span class="keyword">end</span>
-</pre><img vspace="5" hspace="5" src="correctHBcdb_01.png" alt=""> <h2>get topography<a name="11"></a></h2><pre class="codeinput"><span class="keyword">if</span> figs
+</pre><img vspace="5" hspace="5" src="https://github.com/yuval-harpaz/cleanMEG_BIU/tree/master/cleanMEG/MEGtxt/html/correctHBcdb_01.png" alt=""> <h2>get topography<a name="11"></a></h2><pre class="codeinput"><span class="keyword">if</span> figs
     <span class="keyword">if</span> isfield(figOptions,<span class="string">'layout'</span>) &amp;&amp; isfield(figOptions,<span class="string">'label'</span>)
         topo={};
         topo.avg=median(data(:,Ipeaks),2);
@@ -382,7 +382,7 @@ topoTraceN=standard(topoTrace);
 <span class="keyword">if</span> ~posHB
     topoTraceN=-topoTraceN;
 <span class="keyword">end</span>
-</pre><img vspace="5" hspace="5" src="correctHBcdb_02.png" alt=""> <h2>check if topo of every peak is correlated to average topo<a name="12"></a></h2><pre class="codeinput">r=corr(data(:,Ipeaks),median(data(:,Ipeaks),2));
+</pre><img vspace="5" hspace="5" src="https://github.com/yuval-harpaz/cleanMEG_BIU/tree/master/cleanMEG/MEGtxt/html/correctHBcdb_02.png" alt=""> <h2>check if topo of every peak is correlated to average topo<a name="12"></a></h2><pre class="codeinput">r=corr(data(:,Ipeaks),median(data(:,Ipeaks),2));
 <span class="keyword">if</span> figs
     figure;
     plot(time,topoTraceN)
@@ -392,7 +392,7 @@ topoTraceN=standard(topoTrace);
     legend(<span class="string">'topoTrace'</span>,<span class="string">'meanMEG'</span>,<span class="string">'r data-topo &gt; 0.5'</span>)
 
 <span class="keyword">end</span>
-</pre><img vspace="5" hspace="5" src="correctHBcdb_03.png" alt=""> <img vspace="5" hspace="5" src="correctHBcdb_04.png" alt=""> <h2>average good HB and make a template<a name="13"></a></h2><pre class="codeinput">IpeaksR=Ipeaks(r&gt;0.5);
+</pre><img vspace="5" hspace="5" src="https://github.com/yuval-harpaz/cleanMEG_BIU/tree/master/cleanMEG/MEGtxt/html/correctHBcdb_03.png" alt=""> <img vspace="5" hspace="5" src="https://github.com/yuval-harpaz/cleanMEG_BIU/tree/master/cleanMEG/MEGtxt/html/correctHBcdb_04.png" alt=""> <h2>average good HB and make a template<a name="13"></a></h2><pre class="codeinput">IpeaksR=Ipeaks(r&gt;0.5);
 IpeaksR=IpeaksR(IpeaksR&gt;sampBefore);
 IpeaksR=IpeaksR(IpeaksR&lt;(size(data,2)-sampBefore));
 period2=diff(IpeaksR)/sRate; <span class="comment">% estimate period</span>
