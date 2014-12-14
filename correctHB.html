@@ -325,7 +325,7 @@ posHB=true;
     plot(time(Ipeaks), peaks,<span class="string">'ro'</span>)
     title(<span class="string">'Peak detection on mean MEG (or ECG) trace, OK if many of them are not HB'</span>)
 <span class="keyword">end</span>
-</pre><img vspace="5" hspace="5" src="https://github.com/yuval-harpaz/cleanMEG_BIU/tree/master/cleanMEG/MEGtxt/html/correctHBcdb_01.png" alt=""> <h2>get topography<a name="11"></a></h2><pre class="codeinput"><span class="keyword">if</span> figs
+</pre><img vspace="5" hspace="5" src="https://github.com/yuval-harpaz/cleanMEG_BIU/MEGtxt/html/correctHBcdb_01.png" alt=""> <h2>get topography<a name="11"></a></h2><pre class="codeinput"><span class="keyword">if</span> figs
     <span class="keyword">if</span> isfield(figOptions,<span class="string">'layout'</span>) &amp;&amp; isfield(figOptions,<span class="string">'label'</span>)
         topo={};
         topo.avg=median(data(:,Ipeaks),2);
