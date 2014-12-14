@@ -36,8 +36,6 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % leave some low frequencies in. use tempFiltFreq for this one.
 % I added filtering option dataFiltFreq for the data (and meanMEG) to get rid of low
 % frequencies (DC recordings). not performed by default.
-
-
 %  - cfg.chanSnrThr (default 0) is the threshold (in z scores) that tell which channels are cleaned and which
 % remain as are. use 0 to clean all.
 %  - cfg.rThr (0.5) is the threshold for correlation between topographies of averaged R peak
@@ -72,7 +70,6 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % peak (seconds)
 %  - cfg.repressTime (20ms) is how much of the template to repress to zero on
 %  the edges (ms)
-
 %
 % 4D users can run the function from the folder with the data ('c,*') file, with no
 % input arguments:
@@ -80,14 +77,10 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % or like this cleanData=correctHB([],[],1); to get the figures.
 % if you don't specify figure options you still get one before / after figure.
 % added by Dr. Yuval Harpaz to Prof. Abeles' work
-
 % Issues
-% - amplitude estimate per HB needs be better testing
+%
 % - only R amplitude is corrected, may consider to change q s and t waves.
-% - memory problem, I should fix it to make topo and template based on the
-% beginning of the data to clean the rest with it as well, piece by piece.
 % - allow using a premade template, good for cleaning data in 2 pieces
-% - 
 % it works, try it!
 
 %% default variables and parameters
@@ -261,6 +254,7 @@ if ~isempty(jbeg)
     end
     %bads(bads<sampBefore+1)=sampBefore+1;
     bads=unique(bads);
+    bads=bads(bads>0);
     badData=data(:,bads);
     %bads=(jbeg-round(sRate./2)):(jend2+round(sRate*0.5));
     data(:,bads)=0;
@@ -272,7 +266,7 @@ if ~isempty(jbeg)
         end
     end
     diary('HBlog.txt')
-    warning(['jump? what''','s the noise at ',num2str(time(jbeg)),'s? zeroed noise from ',num2str(time(bads(1))),' to ',num2str(time(bads(end)))]);
+    warning(['jump? what''','s the noise at ',num2str(time(jbeg)),'s? zeroed noise from ',num2str(max([0,time(bads(1))])),' to ',num2str(time(bads(end)))]);
     diary off
     % end
 else
