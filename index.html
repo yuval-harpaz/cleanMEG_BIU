@@ -52,7 +52,11 @@
       cleaning MEG data at Bar-Ilan University with matlab tools.
     </div>
 
-    <p>Hi. here you can find the latest version of our cleaning procedures. it includes the <a href="http://biomag.wikidot.com/msi-matlab">pdf4D</a> tool. The main function 'createCleanFile.m' was written by Prof. Abeles, and was published with Idan Tal. Please refer to this work <a href="http://www.sciencedirect.com/science/article/pii/S0165027013001325">(Tal & Abeles, 2013)</a> if you use the function. createCleanFile works on 4D data only. You can use correctLF and correctHB to clean line frequency (50Hz) and heartbeat artifacts for any MEG / EEG data. to clean heartbeats, try: clean=correctHB(data,samplingRate); <a href="http://htmlpreview.github.io/?https://github.com/yuval-harpaz/cleanMEG_BIU/blob/master/cleanMEG/MEGtxt/html/correctHB.html"> Here </a> are some explanations and examples for how it works, input, output and plots of the function.
+    <p>Hi. here you can find the latest version of our cleaning procedures. it includes the <a href="http://biomag.wikidot.com/msi-matlab">pdf4D</a> tool.
+    The main function 'createCleanFile.m' was written by Prof. Abeles, and was published with Idan Tal.
+    Please refer to this work <a href="http://www.sciencedirect.com/science/article/pii/S0165027013001325">(Tal & Abeles, 2013)</a> if you use the function.
+    createCleanFile works on 4D data only. You can use correctLF and correctHB to clean line frequency (50Hz) and heartbeat artifacts for any MEG / EEG data. to clean heartbeats, try: clean=correctHB(data,samplingRate); <a href="http://htmlpreview.github.io/?https://github.com/yuval-harpaz/cleanMEG_BIU/blob/master/cleanMEG/MEGtxt/html/correctHB.html"> Here </a> are some
+    explanations and examples for how it works, input, output and plots of the function.
 
 <h2>Download</h2>
     <p>
@@ -66,6 +70,10 @@
     </p>
 </p><h2>Install</h2>
 <p>Add cleanMEG_BIU/cleanMEG with subfolders to your matlab path. use <a href="https://github.com/yuval-harpaz/cleanMEG_BIU/blob/master/cleanFileExample.m">cleanFileExample.m</a> to call the function.</p>
+</p><h2>Examples</h2>
+<p> BIU users, use <a href="https://github.com/yuval-harpaz/cleanMEG_BIU/blob/master/cleanFileExample.m">cleaneFileExample.m</a> for createCleanFile.
+BIU users who want to use correctHB see the 'BIU users section in <a href="https://github.com/yuval-harpaz/cleanMEG_BIU/blob/master/correctHB_4D_example.m">correctHB_4D_example</a>.
+<p> There are also example scripts in the repository for CTF, Elekta and 4D users (not from BIU) showing how to clean HB or LF.
 <h2>License</h2>
 <p><a href="http://www.gnu.org/licenses/old-licenses/gpl-2.0.html">GPLv2 </a><a href="http://www.gnu.org/copyleft/">copyleft</a></p>
 <h2>Author</h2>
