@@ -1,5 +1,7 @@
 % Example of cleaning neuromag data of HeartBeat artifact
 % I read the fif file with fieldtrip
+% If you don't want to use FieldTrip or if you want to rewrite a fif file
+% see correctLF_neuromag_example.m
 
 LS=ls('*.fif');
 LS=LS(1:end-1);
