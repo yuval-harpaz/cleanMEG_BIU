@@ -1,67 +1,73 @@
 function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 
-% - data is a matrix with rows for channels, raw data, not filtered. it can
-% also be a filename.mat, directing to data matrix file, or a 4D filename such
-% as 'c1,rfhp0.1Hz'.
-% - sRate is sampling rate
-% - figOptions=false;
-% if you want fieldtrip topoplot of HB (first and second sweeps) you have to have:
-% figOptions.label=N by 1 cell arraay with channel names of data
-% figOptions.layout='4D248.lay' for 4D users. I recommend
-% 'neuromag306mag.lay' for neuromag users even if data includes also grads.
-% - ECG can be ECG (useful for ctf users) or a mean of subset of MEG channels where the HB is
-% visible. neuromag users can put there the mean of the magnetometers to
-% clean both magnetometers and gradiometers included in data.
-%
-% HB components   
+%% HB components   
 %     /\      _____         /\      _____     
 % __ /  \  __/     \______ /  \  __/     \__...
 %   /    \/               /    \/ 
 %   Q  R  S     T
 %
+%% Input
+% - data is a matrix with rows for channels, raw data, not filtered. it can
+% also be a filename.mat, directing to data matrix file, or a 4D filename such
+% as 'c1,rfhp0.1Hz'.
+% - sRate is sampling rate
+% - figOptions=false for fuw figures (you always get them) and true for
+% many figures. If you want fieldtrip topoplot of HB (first and second sweeps)
+% you have to have:
+% figOptions.label=N by 1 cell array with channel names of data
+% figOptions.layout='4D248.lay' for 4D users.
+% I recommend 'neuromag306mag.lay' for neuromag users even if data includes also grads.
+% - ECG can be ECG (useful for ctf users) or a mean of subset of MEG channels where the HB is
+% visible. Neuromag users can put there the mean of the magnetometers to
+% clean both magnetometers and gradiometers included in data. This is the
+% only filter that actually changes the data. The rest are for better
+% processing of HB.
 %
-%% cfg
-% you can change variables by placing them in cfg. 
-% lots of thresholds can be set and filters factors.
+% cfg
 %
+% You can change variables by placing them in cfg. 
+% Lots of thresholds can be set and filters factors.
 % a bit about the FILTERS.
-% PEAK detection is performed on meanMEGf. a highpass is recommended to
-% eliminate drift, but also the T wave which is sometimes larger than the R.
+% PEAK detection is performed on meanMEGf (filtered mean MEG channel). A highpass is recommended to
+% ignore the T wave which is sometimes larger than the R and not very indicative of HB timing.
 % cfg.peakFiltFreq sets the bandpass freqs for this one.
-% the AMPLITUDE of R is estimated, but then you may want a highpass filter
+% The AMPLITUDE of R is estimated, but then you may want a highpass filter
 % only, not to cut down R peak. cfg.ampFiltFreq can set up this filter as bp or hp.
-% when using xcorr or Abeles method a TEMPLATE HB is fitted to the ECG like
-% trace (meanMEG). another filter can be used there, in order to supress T
-% for better timing. when the R is small and T can help the template match
-% leave some low frequencies in. use tempFiltFreq for this one.
+% When using xcorr or Abeles method a TEMPLATE HB is fitted to the ECG like
+% trace (meanMEG). Another filter can be used there, in order to supress T
+% for better timing. When the R is small the T can help with the template
+% match, so leave some low frequencies in. Use tempFiltFreq for this one.
 % I added filtering option dataFiltFreq for the data (and meanMEG) to get rid of low
-% frequencies (DC recordings). not performed by default.
+% frequencies (DC recordings). Not performed by default.
 %  - cfg.chanSnrThr (default 0) is the threshold (in z scores) that tell which channels are cleaned and which
-% remain as are. use 0 to clean all.
+% remain as are. Use 0 to clean all. SNR here is how much heartbeat peak
+% there is in each channel. You may want not to clean channels that are
+% not dirty.
 %  - cfg.rThr (0.5) is the threshold for correlation between topographies of averaged R peak
 % and a particular R peak, it determains which instances of HB will be
-% taken to calculate the HB temporal template
-%  - cfg.minPeriod (0.45) low limit for HB period
-%  - cfg.maxPeriod (2) upper limit for HB period
+% taken to calculate the HB temporal template.
+%  - cfg.minPeriod (0.45) low limit for HB period. May be less for babies.
+%  - cfg.maxPeriod (2) upper limit for HB period. Can be more for Mark and
+%  other extreme cases, but he is now in Costa Rica
 %  - cfg.chanZthr (20) z-score for declaring bad channels. A channel is bad
-%  if it surpasses this value for 3 seconds in the beginning of the
+%  if it surpasses this value for 3 seconds in the beginning.
 %  - cfg.jPad (1) how much to zero pad before and after jump
 %  - cfg.jZthr (15) is a z-score over which the meanMEG is considered to
-%  have jump artifact
+%  have a jump artifact
 %  - cfg.peakFiltFreq ([7 90]) is the band-pass filter used for the meanMEG data, before peak
 % detection.
-%  - cfg.tempFiltFreq (same as peakFiltFreq) is the filter used for
-%  meanMEG template and meanMEG before template match takes place. when
+%  - cfg.tempFiltFreq (same default as peakFiltFreq) is the filter used for
+%  meanMEG template and meanMEG before template match takes place. When
 %  T is large and R is small you may want to lower the highpass freq. It
 %  can save the day but beware, tricky business.
 %  - cfg.matchMethod can be 'xcorr' (default) or 'Abeles', it is how you find
-% the match between a template HB and meanMEG / ECG recording. you can also
+% the match between a template HB and meanMEG / ECG recording. You can also
 % use 'topo' and 'meanMEG' in order to define HB peaks on the topography
 % trace or the mean(MEG) channel.
 %  - cfg.ampFiltFreq (2) is a high-pass or band-pass filter used to test R
-% peak amplitude. better use highpass only, although bp may improve linear
+% peak amplitude. Better use highpass only, although bp may improve linear
 % fit between (unfiltered) template and filtered data. 
-%  - cfg.ampLinThr (0.25) is linear regression r threshold. if there is no ggood
+%  - cfg.ampLinThr (0.25) is linear regression r threshold. If there is no good
 %  fit between template QRS and an instance of a heart beat, amplitude will not
 %  be assesed by r, the average HB amp will be given.
 %  - cfg.afterHBs (0.7 of the period) is how long the template should continue after the 
@@ -69,19 +75,32 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %  - cfg.beforeHBs (0.3 of the period) is when the template should start before the 
 % peak (seconds)
 %  - cfg.repressTime (20ms) is how much of the template to repress to zero on
-%  the edges (ms)
+%  the edges.
 %
+%% output
+%  - data is a matrix of cleaned data
+%  - HBtimes is the times when HB peaks were detected
+%  - templateHB is the average HB
+%  - Period is the median interval between two heartbeas.
+%  - MCG is the meanMEG channel
+%  - Rtopo is the topography at the peak of R, similar to component
+%  analysis topography (just cleaner)
+%
+%% Examples
 % 4D users can run the function from the folder with the data ('c,*') file, with no
 % input arguments:
 % cleanData=correctHB;
 % or like this cleanData=correctHB([],[],1); to get the figures.
-% if you don't specify figure options you still get one before / after figure.
-% added by Dr. Yuval Harpaz to Prof. Abeles' work
-% Issues
+% If you don't specify figure options you still get one before / after figure.
+% You can write a 4D file like this: rewrite_pdf(cleanData);
 %
-% - only R amplitude is corrected, may consider to change q s and t waves.
-% - allow using a premade template, good for cleaning data in 2 pieces
-% it works, try it!
+% To clean other data use:
+% cleanData=correctHB(data,samplingRate,1);
+% or the more RAM friendly form
+% cleanData=correctHB('data.mat',samplingRate,1);
+% added by Dr. Yuval Harpaz to Prof. Abeles' work. 4D users can use Abeles'
+% function createCleanFile to clean HB, but it is more touchy.
+
 
 %% default variables and parameters
 if ~exist('figOptions','var')
