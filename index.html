@@ -10,7 +10,7 @@
 	<style type="text/css">
 		body {
   		margin-top: 1.0em;
-  		background-color: #c6473e;
+  		background-color: #9966ff;
 		  font-family: "Helvetica,Arial,FreeSans";
   		color: #ffffff;
     }
@@ -18,12 +18,12 @@
       margin: 0 auto;
       width: 700px;
     }
-		h1 { font-size: 3.8em; color: #39b8c1; margin-bottom: 3px; }
+		h1 { font-size: 3.8em; color: #006600; margin-bottom: 3px; }
 		h1 .small { font-size: 0.4em; }
 		h1 a { text-decoration: none }
-		h2 { font-size: 1.5em; color: #39b8c1; }
-    h3 { text-align: center; color: #39b8c1; }
-    a { color: #39b8c1; }
+		h2 { font-size: 1.5em; color: #006600; }
+    h3 { text-align: center; color: #006600; }
+    a { color: #0000ff; }
     .description { font-size: 1.2em; margin-bottom: 30px; margin-top: 30px; font-style: italic;}
     .download { float: right; }
 		pre { background: #000; color: #fff; padding: 15px;}
@@ -45,14 +45,26 @@
         <img border="0" width="90" src="http://github.com/images/modules/download/tar.png"></a>
     </div>
 
-    <h1><a href="http://github.com/yuval-harpaz/cleanMEG_BIU">cleanMEG_BIU</a>
-      <span class="small">by <a href="http://github.com/yuval-harpaz">yuval-harpaz</a></span></h1>
+    <h1><a href="http://github.com/yuval-harpaz/cleanMEG_BIU">cleanMEG_BIU</a></h1>
+     <h1><span class="small"> <a href="http://github.com/yuval-harpaz">yuval-harpaz</a></span></h1>
 
     <div class="description">
       cleaning MEG data at Bar-Ilan University with matlab tools.
     </div>
 
-    <p>Hi. here you can find the latest version of our cleaning procedures. it includes the <a href="http://biomag.wikidot.com/msi-matlab">pdf4D</a> tool</p><h2>Install</h2>
+    <p>Hi. here you can find the latest version of our cleaning procedures. it includes the <a href="http://biomag.wikidot.com/msi-matlab">pdf4D</a> tool. The main function 'createCleanFile.m' was written by Prof. Abeles, and was published with Idan Tal. Please refer to this work <a href="http://www.sciencedirect.com/science/article/pii/S0165027013001325">(Tal & Abeles, 2013)</a> if you use the function. createCleanFile works on 4D data only. You can use correctLF and correctHB to clean line frequency (50Hz) and heartbeat artifacts for any MEG / EEG data. to clean heartbeats, try: clean=correctHB(data,samplingRate); <a href="http://htmlpreview.github.io/?https://github.com/yuval-harpaz/cleanMEG_BIU/blob/master/cleanMEG/MEGtxt/html/correctHB.html"> Here </a> are some explanations and examples for how it works, input, output and plots of the function.
+
+<h2>Download</h2>
+    <p>
+      You can download this project in either
+      <a href="http://github.com/yuval-harpaz/cleanMEG_BIU/zipball/master">zip</a> or
+      <a href="http://github.com/yuval-harpaz/cleanMEG_BIU/tarball/master">tar</a> formats.
+    </p>
+    <p>You can also clone the project with <a href="http://git-scm.com">Git</a>
+      by running:
+      <pre>$ git clone git://github.com/yuval-harpaz/cleanMEG_BIU</pre>
+    </p>
+</p><h2>Install</h2>
 <p>Add cleanMEG_BIU/cleanMEG with subfolders to your matlab path. use <a href="https://github.com/yuval-harpaz/cleanMEG_BIU/blob/master/cleanFileExample.m">cleanFileExample.m</a> to call the function.</p>
 <h2>License</h2>
 <p><a href="http://www.gnu.org/licenses/old-licenses/gpl-2.0.html">GPLv2 </a><a href="http://www.gnu.org/copyleft/">copyleft</a></p>
@@ -64,16 +76,7 @@
 <br/>      </p>
 
 
-    <h2>Download</h2>
-    <p>
-      You can download this project in either
-      <a href="http://github.com/yuval-harpaz/cleanMEG_BIU/zipball/master">zip</a> or
-      <a href="http://github.com/yuval-harpaz/cleanMEG_BIU/tarball/master">tar</a> formats.
-    </p>
-    <p>You can also clone the project with <a href="http://git-scm.com">Git</a>
-      by running:
-      <pre>$ git clone git://github.com/yuval-harpaz/cleanMEG_BIU</pre>
-    </p>
+    
 
     <div class="footer">
       get the source code on GitHub : <a href="http://github.com/yuval-harpaz/cleanMEG_BIU">yuval-harpaz/cleanMEG_BIU</a>
