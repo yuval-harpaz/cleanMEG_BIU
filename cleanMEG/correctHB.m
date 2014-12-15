@@ -199,14 +199,10 @@ end
 repressTime=default('repressTime',round(sRate/50),cfg);
 %% pad with zeros for templite slide
 sampBefore=round(sRate*maxPeriod);
-%time=1/sRate:1/sRate:size(data,2)/sRate;
 time=-sampBefore/sRate:1/sRate:(size(data,2)+sampBefore)/sRate;
 time=time(2:end);
-origDataSize=size(data);
 meanMEG=[zeros(1,sampBefore),meanMEG,zeros(1,sampBefore)];
 data=[zeros(size(data,1),sampBefore),data,zeros(size(data,1),sampBefore)];
-
-realDataSamp=[sampBefore+1,size(data,2)-sampBefore];
 %% Filter data if requested
 if ~isempty(dataFiltFreq)
     display('filtering the data')
@@ -222,8 +218,8 @@ if ~isempty(dataFiltFreq)
         elseif dataFiltFreq>=15
             ObjData=fdesign.lowpass('Fp,Fst,Ap,Ast',dataFiltFreq,dataFiltFreq+10,1,60,sRate);
         end
-        FiltData=design(ObjData ,'butter');
     end
+    FiltData=design(ObjData ,'butter');
     data = myFilt(data,FiltData);
     meanMEG=myFilt(meanMEG,FiltData);
 end
@@ -285,7 +281,7 @@ if ~isempty(jbeg)
         end
     end
     diary('HBlog.txt')
-    warning(['jump? what''','s the noise at ',num2str(time(jbeg)),'s? zeroed noise from ',num2str(max([0,time(bads(1))])),' to ',num2str(time(bads(end)))]);
+    warning(['jump? what''','s the noise at ',num2str(max([0,time(bads(1))])),'s? zeroed noise from ',num2str(max([0,time(bads(1))])),' to ',num2str(time(bads(end)))]);
     diary off
     % end
 else
@@ -404,8 +400,8 @@ if figs
     plot(time,topoTraceN)
     hold on
     plot(time,meanMEGN,'r')
-    plot(time(Ipeaks(r>0.5)),meanMEGN(Ipeaks(r>0.5)),'g.');
-    legend('topoTrace','meanMEG','r data-topo > 0.5')
+    plot(time(Ipeaks(r>rThr)),meanMEGN(Ipeaks(r>rThr)),'g.');
+    legend('topoTrace','meanMEG',['r data-topo > ',num2str(rThr)])
 end
 %% average good HB and make a template
 IpeaksR=Ipeaks(r>0.5);
@@ -424,6 +420,8 @@ else
         ObjXcr=fdesign.bandpass(...
             'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
             Fst1,Fp1,tempFiltFreq(2),tempFiltFreq(2)+10,60,1,60,sRate);
+        FiltXcr=design(ObjXcr ,'butter');
+        meanMEGxcrF = myFilt(meanMEG,FiltXcr);
     elseif length(tempFiltFreq)==1
         if tempFiltFreq<15
             ObjXcr=fdesign.highpass('Fst,Fp,Ast,Ap',max([tempFiltFreq-1,0.01]),tempFiltFreq,60,1,sRate);%
@@ -454,9 +452,9 @@ else
 end
 switch matchMethod
     case 'xcorr'
-        matchTrace=XCORR(meanMEGpos,temp1e,maxi);
+        matchTrace=XCORR(meanMEGpos,temp1e);
     case 'Abeles'
-        [snr,signal]=match_temp(meanMEGxcrF,temp1e,maxi);
+        [snr,~]=match_temp(meanMEGxcrF,temp1e,maxi);
         matchTrace=snr;
     case 'topo'
         matchTrace=topoTrace;
@@ -597,7 +595,7 @@ end
 %make temp per chan
 sBef=maxi-1;
 sAft=length(templateHB)-maxi;
-HBtemp=HBbyChan(data,sRate,Ipeaks2in,sBef,sAft);
+HBtemp=HBbyChan(data,Ipeaks2in,sBef,sAft,repressTime);
 % check SNR per chan
 sm50=round(sRate*0.05);
 s0=maxi-sm50*3;
@@ -734,13 +732,13 @@ HBxc=xcorr(HB);
 [~,ipxc]=findPeaks(HBxc,1.5,sRate*period*0.6); % index peak xcorr
 if length(ipxc)>1
     nextPeak=ceil(length(ipxc)/2+0.5);
-    period4=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate;
+    period4=(ipxc(nextPeak)-ipxc(nextPeak-1))/sRate; %#ok<NASGU>
     % else
     xcorrByseg=false;
     if length(trace)>=2^20 % test if version is later than 1011b
         ver=version('-release');
         if ~strcmp(ver,'2011b')
-            if str2num(ver(1:end-1))<=2011
+            if str2num(ver(1:end-1))<=2011 %#ok<ST2NM>
                 xcorrByseg=true;
             end
         end
@@ -822,7 +820,7 @@ end
 % disp(['overlapping heartbeats at ',num2str(Ipeaks(HBol/sRate)),'s'])
 % diary off
 % end
-function tempe=HBbyChan(trace,sRate,peakIndex,sampBefore,sampAfter,repressTime)
+function tempe=HBbyChan(trace,peakIndex,sampBefore,sampAfter,repressTime)
 HB=zeros(size(trace,1),sampBefore+1+sampAfter);
 % average HBs
 for epochi=1:length(peakIndex)
@@ -831,7 +829,6 @@ end
 HB=HB/epochi;
 % reduce edges to zero
 edgeRepressor=ones(1,size(HB,2));
-repressTime=round(sRate/50);
 reducVec=0:1/repressTime:1;
 reducVec=reducVec(1:end-1);
 edgeRepressor(1:length(reducVec))=reducVec;
@@ -863,7 +860,7 @@ for HBi=1:length(Ipeaks);
     end
     MCG(:,s0+Rlims(1)-1:s0+Rlims(2)-1)=temp(:,Rlims(1):Rlims(2))*amp(HBi);
 end
-function xcr=XCORR(x,y,Rsamp)
+function xcr=XCORR(x,y)
 xcorrByseg=false;
 if length(x)>=2^20 % test if version is later than 1011b
     ver=version('-release');
@@ -889,7 +886,6 @@ if xcorrByseg
         xcrPad=zeros(size(trace2));
         [xcCurrent,lags]=xcorr(trace2,y);
         xcCurrent=xcCurrent(lags>=0);
-        xcrPad=zeros(size(trace2));
         xcrPad(Rsamp:end)=xcCurrent(1:end-Rsamp+1);
         xcr=[xcr,xcrPad];
         % FIXME xcorr (fftfilt) won't take it for more than 2^20

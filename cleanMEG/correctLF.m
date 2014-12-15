@@ -136,7 +136,7 @@ if isempty(data) || exist('var4DfileName','var');
     if ~exist('var4DfileName','var');
         try
             var4DfileName=ls('hb_c,*');
-        catch %#ok<CTCH>
+        catch
             var4DfileName=ls('c,*');
         end
         var4DfileName=['./',var4DfileName(1:end-1)];
@@ -276,7 +276,7 @@ cycInterval=1000*mean(diff(whereUp))/sRate;
 if ~round(cycInterval)==1000/Lfreq
     warning('whereUp has wrong frequency')
 end
-badCue=find(diff(whereUp)>1.2*sRate/Lfreq); %#ok<EFIND>
+badCue=find(diff(whereUp)>1.2*sRate/Lfreq);
 if ~isempty(badCue)
     whereUpOld=whereUp;
     % try matching a template
@@ -296,7 +296,7 @@ if ~isempty(badCue)
     end
     temp=mean(temp,1);
     display('matching template artifact to trace, to find zero crossing')
-    [snr,signal]=match_temp(chanLFhp,temp,1);
+    [~,signal]=match_temp(chanLFhp,temp,1);
     [~, IpeaksPos]=findPeaks(signal,0,round(0.75*length(temp))); % no peaks closer than 60% of period
     [~, IpeaksNeg]=findPeaks(-signal,0,round(0.75*length(temp)));
     if std(diff(IpeaksPos))<std(diff(IpeaksNeg))
@@ -620,7 +620,7 @@ if size(dataA,1)>1
     error('one channel only')
 end
 if nargin>3
-    okArgs = {'GLOBAL','ADAPTIVE','PHASEPRECESSION','FITSIZE','ADAPTIVE1','ADAPTIVE2'};
+    okArgs = {'GLOBAL','ADAPTIVE','PHASEPRECESSION','FITSIZE','ADAPTIVE1'};
     k = find(strcmpi(method, okArgs));
     if isempty(k)
         error('MATLAB:MEGanalysis:BadParameter',...
@@ -634,7 +634,6 @@ if nargin>3
         phasePrecession = false;
         fitSize=false;
         Adaptive1 = false;
-        Adaptive2=false;
         switch(k)
             case 1  % GLOBAL
                 Global=true;
@@ -658,14 +657,6 @@ if nargin>3
                 if isempty(startNum)
                     startNum=4000;
                 end
-            case 6 % ADAPTIVE2
-                Adaptive2 = true;
-                if ~exist('startNum','var')
-                    startNum=[];
-                end
-                if isempty(startNum)
-                    startNum=4000;
-                end
         end
     end
 else
@@ -683,12 +674,10 @@ if ~exist('epochs', 'var'), epochs = []; end
 if isempty(epochs), epochs = [0, length(dataA)]; end
 if length(epochs)>2
     epoched = true;
-    numEpochs = length(epochs)-1;
     epochS = epochs(1:end-1)+1;
     epochE = [(epochS(2:end)-1) length(dataA)];
 else
     epoched = false;
-    numEpochs = 1;
     epochS = epochs(1)+1;
     epochE = epochs(2)-1;
     if length(whereUp)<500 && ~Global
@@ -710,9 +699,7 @@ end
 if epochS(1)>1
     epochS=[1 epochS];
     epochE = [epochS(2)-1 epochE];
-    numEpochs = length(epochS);
 end
-dW = diff(whereUp);
 if ~exist('noiseThr','var')
     noiseThr=[];
 end
@@ -731,13 +718,6 @@ Artifact=zeros(size(dataA));
 if Global
     if ~epoched
         meanL=round(mean(diff(whereUp)));
-        firstCycleStart = whereUp(1);
-        first=1;
-        last = find(whereUp<=epochE,1, 'last')-1;
-        kk=1;
-        meanLapprox = round(mean(diff(whereUp)));  % temporary evaluation of a cycle
-        shortEpoch = false;
-        noUpInEpoch = false;
     else % consider only whereUp with complete cycles at each epoch
         error('no support for epoched, use createCleanFile');
     end
@@ -1092,7 +1072,7 @@ if isempty(noiseThr)
 end
 
 maxL=round(1.25*cycLength);
-[nChannels,mSamples] = size(dataA);
+[nChannels,~] = size(dataA);
 numCycles = length(whereUp)-2;
 sum1 = zeros(nChannels,maxL+1);
 % Estimate noise
