@@ -1,6 +1,6 @@
 % Example of cleaning 4D data of HeartBeat artifact
 % open newData and rewrite_pdf for more options if the default doesn't work
-
+% better clean LF before HB
 
 % clean HB
 newData=correctHB;
