@@ -1,0 +1,2374 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>correctLF</title><meta name="generator" content="MATLAB 7.13"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2014-12-15"><meta name="DC.source" content="correctLF.m"><style type="text/css">
+
+body {
+  background-color: white;
+  margin:10px;
+}
+
+h1 {
+  color: #990000; 
+  font-size: x-large;
+}
+
+h2 {
+  color: #990000;
+  font-size: medium;
+}
+
+/* Make the text shrink to fit narrow windows, but not stretch too far in 
+wide windows. */ 
+p,h1,h2,div.content div {
+  max-width: 600px;
+  /* Hack for IE6 */
+  width: auto !important; width: 600px;
+}
+
+pre.codeinput {
+  background: #EEEEEE;
+  padding: 10px;
+}
+@media print {
+  pre.codeinput {word-wrap:break-word; width:100%;}
+} 
+
+span.keyword {color: #0000FF}
+span.comment {color: #228B22}
+span.string {color: #A020F0}
+span.untermstring {color: #B20000}
+span.syscmd {color: #B28C00}
+
+pre.codeoutput {
+  color: #666666;
+  padding: 10px;
+}
+
+pre.error {
+  color: red;
+}
+
+p.footer {
+  text-align: right;
+  font-size: xx-small;
+  font-weight: lighter;
+  font-style: italic;
+  color: gray;
+}
+
+  </style></head><body><div class="content"><h2>Contents</h2><div><ul><li><a href="#3">Cleaning line frequencies (LF) from MEG / EEG data without filters</a></li><li><a href="#4">Input</a></li><li><a href="#5">Output</a></li><li><a href="#6">Examples</a></li><li><a href="#7">set defaults</a></li><li><a href="#8">try to load data file and check if 4D-neuroimaging data</a></li><li><a href="#9">find chans with no obvious problems and compute meanPSD</a></li><li><a href="#10">if requested make hp filter</a></li><li><a href="#11">test 50Hz or 60Hz</a></li><li><a href="#12">find LF cycles on a filtered channel</a></li><li><a href="#13">check that whereUp is OK. if not, find cycles by template matching</a></li><li><a href="#14">prepare parallel processing</a></li><li><a href="#15">baseline correction if requested</a></li><li><a href="#16">cleaning the data</a></li><li><a href="#17">plotting results</a></li><li><a href="#18">Functions</a></li><li><a href="#20">internal version of cleanLineF.m</a></li><li><a href="#21">generate a slowly changing average</a></li><li><a href="#23">similar to adaptive but makes an average of last 2000 and next 2000 (Ncycles/2) cycles. not as good for an unknown reason.</a></li><li><a href="#24">compute a simple average</a></li><li><a href="#27">internal version of oneLineCycle</a></li><li><a href="#29">clean periodic signal from x, allow phase precession</a></li><li><a href="#31">set default parameters</a></li></ul></div><pre class="codeinput"><span class="keyword">function</span> [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
+</pre><pre class="codeinput"><span class="comment">% [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg);</span>
+<span class="comment">% see more examples below</span>
+<span class="comment">%</span>
+</pre><h2>Cleaning line frequencies (LF) from MEG / EEG data without filters<a name="3"></a></h2><p>The function detects zero crossing of power line artifact cycles (of 50 or 60Hz) and averages the cycles. This average serves as a template noise pattern. Subtracting it from each cycle removes the 50Hz artifact and its harmonics (100, 150, 200...)</p><h2>Input<a name="4"></a></h2><p>4D users can use the function without input arguments. It find the current 'c,*', finds the sampling rate, and detects 50Hz cycles on a ref channel. Use input arguments when not using default parameters.</p><pre> -  data is MEG or EEG data, rows for channels.
+    it can be a 4D filename 'c,rfhp0.1Hz', a saved data matrix 'data.mat'.
+    or the data matrix itself (less RAM friendly).
+ -  sRate is sampling rate.
+ -  chanLF is a channel containing detectable 50 or 60Hz. It can be an
+    MEG reference channel. Leave empty to detect the noisiest channel
+    automatically. It can be the index of your dirty channel, when this
+    is one of the channels you want to clean. When the line frequency is
+    hard to detect on any channel use chanLF='time'. LF cycles will not be
+    searched for in the data. Averaging will be based on fixed latencies
+    (20ms for 50Hz artifact). This is best used with low Ncycles (250).
+ -  cfg is an optional structure with the following possible fields:
+     *   cfg.method is 'GLOBAL' or 'ADAPTIVE' (default, see tal &amp; Abeles, 2013).
+         ADAPTIVE allows the shape of the 50Hz artifact to slowly change
+         along the recording. GLOBAL assumes steady artifact, good for
+         short recordings.'FITSIZE' can be used in extreme cases (moving
+         rats), take care there. 'ADAPTIVE1' is moving a sliding window,
+         averager. It seems to be less effective than ADAPTIVE.
+     *   cfg.Ncycles can be used with ADAPTIVE and ADAPTIVE1, specifying
+         how many cycles to average for creating a template. 4000 has no
+         over cleaning (notch) at all, which is good. but some artifact may remain.
+         I wouldn't use less than 250 cycles, because it may result in a
+         50Hz notch. default is 400.
+     *   cfg.Lfreq is the noise frequency, 50 or 60. by default the Lfreq is
+         detected automatically.
+     *   cfg.jobs is for parallel processing with parfor, the number of
+         CPU to use.
+     *   cfg.hpFreq is the low cutoff of a highpass filter. This means
+         that you want to filter the data before cleaning. cfg.hpFreq=0.1
+         is recommended good for DC recordings.
+     *   cfg.noiseType is 'samp' (default) or 'cyc', to test noise sample by
+         sample or cycle by cycle. noisy samples or cycles are cleaned,
+         but their data is not used when creating the noise template.
+         'samp' is not efficient when you have a lot of low freq noise
+         (unfiltered DC recording).
+     *   cfg.noiseThr is how many SD for a channel to consider as noise threshold.
+         When cfg.noiseType='cyc', SD is std(mean(abs(data of one cycle))).
+     *   cfg.blc is baseline correction before work on data. it can be 'none',
+         'median' (default), 'mean' or [time0 time1] to remove the mean of a
+         certain time window.
+     *   cfg.BLfreq ([125 145]) is the limits of baseline frequencies by which to
+         normalize the fft when plotting. does not change the cleaning itself.
+         This was added for neuromag, to integrate mag and grad channels.
+     *   cfg.reverse is for running the cleaning forward and reverse in
+         order to clean the beginning of the file better, where you
+         cannot clean adaptively using only forward sweap. default is
+         false.</pre><h2>Output<a name="5"></a></h2><pre> -   cleanData is what it is
+ -   whereUp is a vector with samples where zero crossing was detected
+ -   noiseSamp samples where noise was detected
+ -   Artifact possible for one channel data only, it is the estimated
+     artifact (chained templates)</pre><h2>Examples<a name="6"></a></h2><p>cleanData=correctLF('data.mat',1017.25,trig); where trig is a digital channel recording the power line zero crossing, 1017.25 is the sampling rate. In data.mat you have a matrix with rows for channels</p><p>cleanData=correctLF(EEGdata,1000); Here we find which EEG channel has most power line artifact and zero crossing is assessed for it.</p><p>cleanData=correctLF; 4D MEG users. it will find the REF channel with most 50Hz (or 60) and clean the MEG. to save it to 4D file format use rewrite_pdf(cleanData).</p><p>Yuval Harpaz Dec 2014</p><h2>set defaults<a name="7"></a></h2><pre class="codeinput"><span class="keyword">if</span> ~exist (<span class="string">'chanLF'</span>,<span class="string">'var'</span>)
+    chanLF=[];
+<span class="keyword">end</span>
+<span class="keyword">if</span> ~exist(<span class="string">'cfg'</span>,<span class="string">'var'</span>)
+    cfg={};
+<span class="keyword">end</span>
+Lfreq      =default(<span class="string">'Lfreq'</span>,[],cfg); <span class="comment">% test if 50 or 60Hz</span>
+method     =default(<span class="string">'method'</span>,<span class="string">'ADAPTIVE'</span>,cfg); <span class="comment">%average</span>
+<span class="keyword">if</span> isfield(cfg,<span class="string">'Ncycle'</span>) <span class="comment">% spelling error</span>
+    Ncycles=default(<span class="string">'Ncycle'</span>,400,cfg);
+<span class="keyword">else</span>
+    Ncycles=default(<span class="string">'Ncycles'</span>,400,cfg);
+<span class="keyword">end</span>
+jobs       =default(<span class="string">'jobs'</span>,[],cfg); <span class="comment">% no parallel processing</span>
+hpFreq     =default(<span class="string">'hpFreq'</span>,[],cfg); <span class="comment">% no high pass filter</span>
+noiseThr   =default(<span class="string">'noiseThr'</span>,5,cfg); <span class="comment">% 5 SD as noise threshold</span>
+noiseType  =default(<span class="string">'noiseType'</span>,<span class="string">'samp'</span>,cfg); <span class="comment">% tests noise by sample</span>
+blc        =default(<span class="string">'blc'</span>,<span class="string">'median'</span>,cfg);
+BLfreq        =default(<span class="string">'BLfreq'</span>,[125 145],cfg);
+reverse        =default(<span class="string">'reverse'</span>,<span class="string">'false'</span>,cfg);
+<span class="keyword">if</span> strcmpi(method,<span class="string">'FITSIZE'</span>)
+    lookForLag=true;
+<span class="keyword">else</span>
+    lookForLag=false;
+<span class="keyword">end</span>
+</pre><h2>try to load data file and check if 4D-neuroimaging data<a name="8"></a></h2><pre class="codeinput"><span class="keyword">if</span> ~exist(<span class="string">'data'</span>,<span class="string">'var'</span>)
+    data=[];
+    sRate=[];
+<span class="keyword">end</span>
+<span class="keyword">if</span> ischar(data)
+    <span class="keyword">if</span> strcmp(data(end-3:end),<span class="string">'.mat'</span>) <span class="comment">% read matrix from file 'data.mat'</span>
+        PWD=pwd;
+        display([<span class="string">'loading '</span>,PWD,<span class="string">'/'</span>,data,]);
+        data=load([<span class="string">'./'</span>,data]);
+        dataField=fieldnames(data);
+        eval([<span class="string">'data=data.'</span>,dataField{1,1},<span class="string">';'</span>]);
+    <span class="keyword">else</span> <span class="comment">% read 4D data from file name specified in 'data'</span>
+        cloc=strfind(data,<span class="string">'c'</span>);
+        comaloc=strfind(data,<span class="string">','</span>);
+        <span class="keyword">if</span> ~isempty(cloc) &amp;&amp; ~isempty(comaloc)
+            <span class="keyword">if</span> comaloc(end)&gt;cloc(1)
+                var4DfileName=data;
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+<span class="keyword">if</span> isempty(data) || exist(<span class="string">'var4DfileName'</span>,<span class="string">'var'</span>);
+    <span class="keyword">if</span> ~exist(<span class="string">'var4DfileName'</span>,<span class="string">'var'</span>);
+        <span class="keyword">try</span>
+            var4DfileName=ls(<span class="string">'hb_c,*'</span>);
+        <span class="keyword">catch</span>
+            var4DfileName=ls(<span class="string">'c,*'</span>);
+        <span class="keyword">end</span>
+        var4DfileName=[<span class="string">'./'</span>,var4DfileName(1:end-1)];
+    <span class="keyword">end</span>
+    var4Dp=pdf4D(var4DfileName);
+    sRate=double(get(var4Dp,<span class="string">'dr'</span>));
+    var4Dhdr = get(var4Dp, <span class="string">'header'</span>);
+    var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
+    var4Dchi = channel_index(var4Dp, <span class="string">'meg'</span>, <span class="string">'name'</span>);
+    display([<span class="string">'reading '</span>,var4DfileName]);
+    data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);<span class="comment">%,var4Dchi);</span>
+    <span class="keyword">if</span> isempty(chanLF)
+        var4Dlabels={<span class="string">'MCxaA'</span>,<span class="string">'MCyaA'</span>,<span class="string">'MCzaA'</span>,<span class="string">'MLxaA'</span>,<span class="string">'MLyaA'</span>,<span class="string">'MLzaA'</span>,<span class="string">'MRxaA'</span>,<span class="string">'MRyaA'</span>,<span class="string">'MRzaA'</span>};
+        var4DchiRef = channel_index(var4Dp,var4Dlabels, <span class="string">'name'</span>);
+        var4Dref = read_data_block(var4Dp,[1 var4DnSamp],var4DchiRef);<span class="comment">%,var4Dchi);</span>
+
+        [FourRef,Fref]=fftBasic(var4Dref,round(sRate));
+        <span class="keyword">if</span> isempty(Lfreq)
+            Lfreq=findLfreq(FourRef,Fref);
+        <span class="keyword">end</span>
+        <span class="keyword">if</span> isempty(chanLF)
+            maxChani=findchanLF(FourRef,Fref,Lfreq);
+        <span class="keyword">end</span>
+        chanLF=var4Dref(maxChani,:);
+        display([<span class="string">'selected '</span>,var4Dlabels{maxChani},<span class="string">' as Line Freq cue'</span>])
+    <span class="keyword">end</span>
+    clear <span class="string">var4D*</span>
+<span class="keyword">end</span>
+<span class="keyword">if</span> isempty(jobs) || size(data,1)==1
+    par=false;
+<span class="keyword">else</span>
+    <span class="keyword">if</span> jobs&gt;1
+        par=true;
+    <span class="keyword">else</span>
+        par=false;
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+</pre><h2>find chans with no obvious problems and compute meanPSD<a name="9"></a></h2><pre class="codeinput">testSamp=min([round(sRate) size(data,2)]);
+<span class="keyword">for</span> chani=1:size(data,1)
+    good(chani)=true; <span class="comment">%#ok&lt;AGROW&gt;</span>
+    <span class="keyword">if</span> isequal(data(chani,1:testSamp),uint16(data(chani,1:testSamp))) || length(unique(data(chani,1:testSamp)))&lt;20
+        good(chani)=false; <span class="comment">%#ok&lt;AGROW&gt;</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+good=find(good);
+</pre><h2>if requested make hp filter<a name="10"></a></h2><pre class="codeinput"><span class="keyword">if</span> ~isempty(hpFreq);
+    display(<span class="string">'filtering'</span>)
+    HighPassSpecObj=fdesign.highpass(<span class="string">'Fst,Fp,Ast,Ap'</span>,0.001,hpFreq,60,1,sRate);<span class="comment">%</span>
+    HighPassFilt=design(HighPassSpecObj ,<span class="string">'butter'</span>);
+    <span class="comment">% BL correction for 1st sec window to avoid ripples in the beginning</span>
+    <span class="keyword">for</span> chani=1:size(data,1)
+        data(chani,:)=data(chani,:)-mean(data(chani,1:round(sRate)));
+    <span class="keyword">end</span>
+    data = myFilt(data,HighPassFilt);
+<span class="keyword">end</span>
+</pre><h2>test 50Hz or 60Hz<a name="11"></a></h2><pre class="codeinput">display(<span class="string">'computing fft'</span>)
+<span class="comment">% check size not to overload</span>
+dSize=size(data,1)*size(data,2);
+<span class="keyword">if</span> dSize&gt;500000000
+    fftLength=round(500000000/size(data,1));
+    display([<span class="string">'lots of data, displaying fft only for about '</span>,num2str(round(fftLength/sRate/60)),<span class="string">'min'</span>])
+<span class="keyword">else</span>
+    fftLength=size(data,2);
+<span class="keyword">end</span>
+[Four,F]=fftBasic(data(good,1:fftLength),round(sRate));
+[~, BLfreq1i] = min(abs(F-BLfreq(1))); <span class="comment">% index for 125Hz</span>
+[~, BLfreq2i] = min(abs(F-BLfreq(2)));
+scale=mean(abs(Four(:,BLfreq1i:BLfreq2i)),2);
+<span class="keyword">if</span> isempty(Lfreq);
+    display(<span class="string">'filtering and searching for line frequency'</span>)
+    [Lfreq,meanPSD]=findLfreq(Four,F);
+    disp([<span class="string">'line frequency is '</span>,num2str(Lfreq),<span class="string">'Hz'</span>])
+<span class="keyword">else</span>
+
+    FourScaled=zeros(size(Four));
+    <span class="keyword">for</span> chani=1:size(Four,1)
+        FourScaled(chani,:)=abs(Four(chani,:))/scale(chani);
+    <span class="keyword">end</span>
+    meanPSD=mean(FourScaled,1);
+<span class="keyword">end</span>
+display(<span class="string">'done fft, preparing LF time indices'</span>)
+</pre><h2>find LF cycles on a filtered channel<a name="12"></a></h2><pre class="codeinput">lookForLF=true;
+
+<span class="keyword">if</span>  isempty(chanLF);
+    <span class="comment">%[Four,F]=fftBasic(data(good,:),round(sRate));</span>
+
+    maxChani=findchanLF(Four,F,Lfreq);
+    chanLF=data(good(maxChani),:);
+    display([<span class="string">'selected chan index '</span>,num2str(good(maxChani)),<span class="string">' as Line Freq cue'</span>])
+<span class="keyword">elseif</span> ischar(chanLF)
+    <span class="keyword">if</span> strcmpi(chanLF,<span class="string">'time'</span>)
+        start=double(1):sRate/Lfreq:double(size(data,2));
+        whereUp=round(start);
+        lookForLF=false;
+    <span class="keyword">elseif</span> strcmp(chanLF(end-3:end),<span class="string">'.mat'</span>)
+        chanLF=load([<span class="string">'./'</span>,data]);
+        dataField=fieldnames(chanLF);
+        eval([<span class="string">'chanLF=chanLF.'</span>,dataField{1,1},<span class="string">';'</span>]);
+    <span class="keyword">else</span>
+        error(<span class="string">'could not figure out what to do with chanLF string'</span>)
+    <span class="keyword">end</span>
+<span class="keyword">elseif</span> length(chanLF)==1;
+    chanLF=data(chanLF,:);
+<span class="keyword">end</span>
+<span class="keyword">if</span> lookForLF
+    <span class="keyword">if</span> length(unique(chanLF))==2 <span class="comment">% zero crossing is coded in chanLF (trigger channel)</span>
+        trigShift=zeros(size(chanLF));
+        trigShift(2:end)=chanLF(1:end-1);
+        trigShift=uint16(trigShift);
+        whereUp=find((uint16(chanLF)-trigShift)&gt;0);
+        <span class="keyword">if</span> max(diff(whereUp))&gt;sRate/Lfreq+3 || min(diff(whereUp))&lt;sRate/Lfreq-3
+            warning(<span class="string">'some triggers are at irregular times'</span>)
+        <span class="keyword">end</span>
+    <span class="keyword">else</span>
+        <span class="keyword">if</span> ~exist(<span class="string">'BPfilt'</span>,<span class="string">'var'</span>)
+            BPobj=fdesign.bandpass(<span class="keyword">...</span>
+                <span class="string">'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2'</span>,<span class="keyword">...</span>
+                Lfreq-10,Lfreq-5,Lfreq*2+5,Lfreq*2+10,60,1,60,sRate);
+            BPfilt=design(BPobj ,<span class="string">'butter'</span>);
+        <span class="keyword">end</span>
+        chanLFf=myFilt(chanLF-mean(chanLF(1:round(sRate))),BPfilt);
+        chanLFShift=[0,chanLFf(1:end-1)];
+        logsum=chanLFf&gt;0;
+        logsum2=chanLFShift&lt;0;
+        whereUp=logsum+logsum2==2;
+        whereUp=find(whereUp);
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+cycLength=round(sRate/Lfreq);
+</pre><h2>check that whereUp is OK. if not, find cycles by template matching<a name="13"></a></h2><pre class="codeinput">cycInterval=1000*mean(diff(whereUp))/sRate;
+<span class="keyword">if</span> ~round(cycInterval)==1000/Lfreq
+    warning(<span class="string">'whereUp has wrong frequency'</span>)
+<span class="keyword">end</span>
+badCue=find(diff(whereUp)&gt;1.2*sRate/Lfreq);
+<span class="keyword">if</span> ~isempty(badCue)
+    whereUpOld=whereUp;
+    <span class="comment">% try matching a template</span>
+    Fp1=round(Lfreq*0.67);  <span class="comment">% 34Hz highpass</span>
+    Fp2=round(Lfreq*2.33); <span class="comment">% 117Hz low pass</span>
+    ObjData=fdesign.bandpass(<span class="keyword">...</span>
+        <span class="string">'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2'</span>,<span class="keyword">...</span>
+        1,Fp1,Fp2,Fp2+10,60,1,60,sRate);
+    <span class="comment">%ObjData=fdesign.highpass('Fst,Fp,Ast,Ap',1,round(Lfreq*0.67),60,1,sRate);%</span>
+    Filt=design(ObjData ,<span class="string">'butter'</span>);
+    chanLFhp = myFilt(chanLF,Filt);
+    cycCount=0;
+    temp=zeros(1,round(sRate/Lfreq));
+    <span class="keyword">for</span> upi=round(1:sRate/Lfreq:sRate*5)
+        cycCount=cycCount+1;
+        temp(cycCount,:)=chanLFhp(upi:upi+round(sRate/Lfreq)-1);
+    <span class="keyword">end</span>
+    temp=mean(temp,1);
+    display(<span class="string">'matching template artifact to trace, to find zero crossing'</span>)
+    [~,signal]=match_temp(chanLFhp,temp,1);
+    [~, IpeaksPos]=findPeaks(signal,0,round(0.75*length(temp))); <span class="comment">% no peaks closer than 60% of period</span>
+    [~, IpeaksNeg]=findPeaks(-signal,0,round(0.75*length(temp)));
+    <span class="keyword">if</span> std(diff(IpeaksPos))&lt;std(diff(IpeaksNeg))
+        Ipeaks=IpeaksPos;
+    <span class="keyword">else</span>
+        Ipeaks=IpeaksNeg;
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> std(diff(Ipeaks))&gt;0.2*sRate/Lfreq
+        warning(<span class="string">'std of cue interval is large'</span>)
+    <span class="keyword">end</span>
+    whereUp=Ipeaks-round(cycLength/4);
+    <span class="keyword">if</span> whereUp(1)&lt;1
+        whereUp=whereUp(2:end);
+    <span class="keyword">end</span>
+    badCueTemp=find(diff(whereUp)&gt;ceil(1.3*sRate/Lfreq));
+    <span class="keyword">if</span> length(badCueTemp)&gt;1.1*length(badCue)
+        disp(<span class="string">'template match did not do good, reverting to previous whereUp'</span>)
+        whereUp=whereUpOld;
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+
+cycInterval=1000*mean(diff(whereUp))/sRate;
+<span class="keyword">if</span> ~round(cycInterval)==1000/Lfreq
+    error(<span class="string">'whereUp has wrong frequency'</span>)
+<span class="keyword">end</span>
+<span class="keyword">if</span> whereUp(1)&gt;(ceil(sRate/Lfreq)+1)
+    diary <span class="string">LFlog.txt</span>
+    disp(<span class="string">'first LF index is away from the beginning, guessing first cycles'</span>)
+    diary <span class="string">off</span>
+    firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
+    whereUp=[firstInd(1:end-1),whereUp];
+<span class="keyword">end</span>
+<span class="keyword">if</span> (size(data,2)-whereUp(end))&gt;(ceil(sRate/Lfreq)+1)
+    diary <span class="string">LFlog.txt</span>
+    disp(<span class="string">'last LF index is away from the end, guessing last cycles'</span>)
+    diary <span class="string">off</span>
+    lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
+    whereUp=[whereUp,lastInd(2:end)];
+<span class="keyword">end</span>
+badCue=find(diff(whereUp)&gt;ceil(1.3*sRate/Lfreq));
+<span class="keyword">if</span> ~isempty(badCue)
+    diary <span class="string">LFlog.txt</span>
+    disp([<span class="string">'irregular interval between cues at (seconds): '</span>,num2str(whereUp(badCue)/sRate)])
+    diary <span class="string">off</span>
+<span class="keyword">end</span>
+</pre><h2>prepare parallel processing<a name="14"></a></h2><pre class="codeinput"><span class="comment">%figure;plot(oneLineCycleInternal(data,whereUp(2000:6000),noiseType,5,cycLength))</span>
+<span class="keyword">if</span> par
+    closeLabs=false;
+    <span class="keyword">try</span>
+        nCPU=matlabpool(<span class="string">'size'</span>); <span class="comment">% 0 if no matlabpool yet;</span>
+    <span class="keyword">catch</span>
+        disp(<span class="string">'could not find "matlabpool". Setting "nCPU" to 1'</span>)
+        nCPU=1;
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> nCPU==0
+        closeLabs=true;
+        <span class="keyword">if</span> isempty(jobs)
+            <span class="keyword">try</span>
+                matlabpool;
+                jobs=matlabpool(<span class="string">'size'</span>);
+            <span class="keyword">catch</span>
+                jobs=1;
+                warning(<span class="string">'cannot get matlabpool to work, define parallel for your matlab to work faster'</span>)
+            <span class="keyword">end</span>
+        <span class="keyword">else</span>
+            <span class="keyword">try</span>
+                matlabpool (<span class="string">'open'</span>, jobs);
+            <span class="keyword">catch</span>
+                jobs=1;
+                warning(<span class="string">'cannot get matlabpool to work, define parallel for your matlab to work faster'</span>)
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">else</span>
+        <span class="keyword">if</span> isempty(jobs)
+            <span class="keyword">try</span>
+                jobs=matlabpool(<span class="string">'size'</span>);
+            <span class="keyword">catch</span>
+                jobs=1;
+                warning(<span class="string">'cannot get matlabpool to work, define parallel for your matlab to work faster'</span>)
+            <span class="keyword">end</span>
+        <span class="keyword">elseif</span> nCPU~=jobs
+            <span class="keyword">try</span>
+                matlabpool <span class="string">close</span>
+                <span class="comment">%matlabpool('local',jobs);</span>
+                matlabpool (<span class="string">'open'</span>, jobs)
+            <span class="keyword">catch</span> <span class="comment">%#ok&lt;*CTCH&gt;</span>
+                jobs=1;
+                warning(<span class="string">'cannot get matlabpool to work, define parallel for your matlab to work faster'</span>)
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+</pre><h2>baseline correction if requested<a name="15"></a></h2><pre class="codeinput"><span class="keyword">if</span> ischar(blc)
+    <span class="keyword">if</span> strcmp(blc,<span class="string">'none'</span>)
+        <span class="comment">% no baseline correction</span>
+    <span class="keyword">elseif</span> strcmp(blc,<span class="string">'median'</span>)
+        <span class="keyword">for</span> chani=1:size(data,1)
+            data(chani,:)=data(chani,:)-median(data(chani,:));
+        <span class="keyword">end</span>
+    <span class="keyword">elseif</span> strcmp(blc,<span class="string">'mean'</span>)
+        <span class="keyword">for</span> chani=1:size(data,1)
+            data(chani,:)=data(chani,:)-mean(data(chani,:));
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">elseif</span> size(blc,1)*size(blc,2)==2
+    blc0=round(blc(1)*sRate);
+    blc1=round(blc(2)*sRate);
+    <span class="keyword">if</span> blc0==0
+        blc0=1;
+    <span class="keyword">end</span>
+    <span class="keyword">for</span> chani=1:size(data,1)
+        data(chani,:)=data(chani,:)-mean(data(chani,blc0:blc1));
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+</pre><h2>cleaning the data<a name="16"></a></h2><p>estimate zero crossing on averaged cycle</p><pre class="codeinput">lag=zeros(1,size(data,1)); <span class="comment">% not zero for FITSIZE method</span>
+<span class="keyword">if</span> lookForLag <span class="comment">% for FITSIZE</span>
+    <span class="keyword">for</span> chani=1:size(data,1)
+        meanLine=oneLineCycleInternal(data(chani,:),whereUp,noiseType,noiseThr,cycLength);
+        meanLine=meanLine-mean(meanLine(1:cycLength));
+        t1=meanLine(1:end-1);
+        t2=meanLine(2:end);
+        tt=t1.*t2;
+        indx=find(tt&lt;0); <span class="comment">% all zero crossings</span>
+        indx=[round(cycLength/2)-indx(1) indx(1)];
+        [~,mini]=min(abs(indx));
+        indx=indx(mini);
+        lag(chani)=indx;
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+<span class="keyword">if</span> size(data,1)==1
+    display(<span class="string">'cleaning'</span>)
+    wu=whereUp+lag;
+    wu=wu(wu&gt;0);
+    wu=wu(wu&lt;size(data,2));
+    [cleanData,~,nS,Artifact]=cleanLineFinternal(data, wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+    noiseSamp{1,1}=nS;
+    <span class="keyword">if</span> reverse
+        temp=cleanLineFinternal(fliplr(data), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+        temp=fliplr(temp);
+        rev1=Ncycles*cycLength; <span class="comment">% good samples only from reverse cleaning</span>
+        rev2=size(data,2)-rev1+1;
+        cleanData(1,1:rev1)=temp(1:rev1);
+        cleanData(1,rev1+1:rev2-1)=(cleanData(1,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+    <span class="keyword">end</span>
+    clear <span class="string">data</span>
+<span class="keyword">else</span>
+    Artifact=<span class="string">'only applies for one channel analysis'</span>;
+
+
+    cleanData=data(good,:);
+    nSamp=cell(size(cleanData,1),1);
+    tic
+    [cleanData(1,:),~,nSamp{chani,1}]=cleanLineFinternal(data(good(1),:), whereUp, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+    time1st=toc;
+    <span class="keyword">if</span> reverse
+        temp=cleanLineFinternal(fliplr(data(good(1),:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+        temp=fliplr(temp);
+        rev1=Ncycles*cycLength; <span class="comment">% good samples only from reverse cleaning</span>
+        rev2=size(data,2)-rev1+1;
+        cleanData(1,1:rev1)=temp(1:rev1);
+        cleanData(1,rev1+1:rev2-1)=(cleanData(1,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+        time1st=time1st*2;
+    <span class="keyword">end</span>
+
+    <span class="keyword">if</span> par
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs));
+        display([<span class="string">'cleaning '</span>,num2str(length(good)),<span class="string">' channels in parallel, wait about '</span>,timeEstimate,<span class="string">'min'</span>])
+    <span class="keyword">else</span>
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/1));
+        display([<span class="string">'cleaning '</span>,num2str(length(good)),<span class="string">' channels one by one, wait about '</span>,timeEstimate,<span class="string">'min. channel '</span>])
+    <span class="keyword">end</span>
+    <span class="comment">% do the cleaning</span>
+
+    <span class="keyword">if</span> par
+        <span class="keyword">parfor</span> chani=2:length(good)
+            wu=whereUp+lag(chani);
+            wu=wu(wu&gt;0);
+            wu=wu(wu&lt;size(data,2));
+            [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+            <span class="keyword">if</span> reverse
+                fowAndRev=cleanData(chani,:);
+                temp=cleanLineFinternal(fliplr(data(chani,:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+                temp=fliplr(temp);
+                rev1=Ncycles*cycLength; <span class="comment">% good samples only from reverse cleaning</span>
+                rev2=size(data,2)-rev1+1;
+                fowAndRev(1:rev1)=temp(1:rev1);
+                fowAndRev(rev1+1:rev2-1)=(fowAndRev(rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+                cleanData(chani,:)=fowAndRev;
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">else</span>
+        <span class="keyword">for</span> chani=2:length(good)
+            wu=whereUp+lag(chani);
+            wu=wu(wu&gt;0);
+            wu=wu(wu&lt;size(data,2));
+            [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+            <span class="keyword">if</span> reverse
+                temp=cleanLineFinternal(fliplr(data(chani,:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+                temp=fliplr(temp);
+                rev1=Ncycles*cycLength; <span class="comment">% good samples only from reverse cleaning</span>
+                rev2=size(data,2)-rev1+1;
+                cleanData(chani,1:rev1)=temp(1:rev1);
+                cleanData(chani,rev1+1:rev2-1)=(cleanData(chani,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+            <span class="keyword">end</span>
+            progNum(chani);
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    data(good,:)=cleanData;
+    clear <span class="string">cleanData</span>
+    cleanData=data;<span class="comment">% sorry about this mess, the parfor made me do this</span>
+    clear <span class="string">data</span>
+    noiseSamp=cell(size(cleanData,1),1);
+    <span class="keyword">for</span> chani=1:length(good)
+        noiseSamp{good(chani),1}=nSamp{chani,1};
+    <span class="keyword">end</span>
+    time2nd=toc;
+    mins=time2nd/60;
+    <span class="keyword">if</span> floor(mins)&gt;str2num(timeEstimate)
+        well=<span class="string">'well, '</span>;
+    <span class="keyword">else</span>
+        well=<span class="string">''</span>;
+    <span class="keyword">end</span>
+    secs=60*(mins-floor(mins));
+    txt=[<span class="string">'\n'</span>,well,<span class="string">'it took '</span>,num2str(floor(mins)),<span class="string">'min and '</span>,num2str(round(secs)),<span class="string">'sec\n'</span>];
+    fprintf(txt);
+<span class="keyword">end</span>
+</pre><h2>plotting results<a name="17"></a></h2><pre class="codeinput">disp(<span class="string">'plotting'</span>)
+[Four,F]=fftBasic(cleanData(good,1:fftLength),round(sRate));
+<span class="comment">% [~, BLfreq1i] = min(abs(F-125)); % index for 125Hz</span>
+<span class="comment">% [~, BLfreq2i] = min(abs(F-145));</span>
+<span class="comment">%scale=mean(abs(Four(:,BLfreq1i:BLfreq2i)),2);</span>
+<span class="keyword">for</span> chani=1:size(Four,1)
+    Four(chani,:)=abs(Four(chani,:))/scale(chani);
+<span class="keyword">end</span>
+meanPSDclean=mean(Four,1);
+figure;
+plot(F,meanPSD,<span class="string">'r'</span>);
+hold <span class="string">on</span>
+plot(F,meanPSDclean,<span class="string">'g'</span>)
+legend(<span class="string">'original'</span>,<span class="string">'clean'</span>)
+title(<span class="string">'PSD after rescaling and averaging channels'</span>)
+<span class="keyword">if</span> par
+    <span class="keyword">if</span> closeLabs
+        <span class="keyword">try</span>
+            matlabpool <span class="string">close</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+display(<span class="string">'done cleaning LF'</span>)
+</pre><h2>Functions<a name="18"></a></h2><pre class="codeinput"><span class="keyword">function</span> [Lfreq,meanPSD]=findLfreq(fourier,freq)
+<span class="comment">% finds if there is more 50 or 60Hz in the data.</span>
+[~, BLfreq1i] = min(abs(freq-125)); <span class="comment">% index for 125Hz</span>
+[~, BLfreq2i] = min(abs(freq-145));
+scale=mean(abs(fourier(:,BLfreq1i:BLfreq2i)),2);
+<span class="keyword">for</span> chani=1:size(fourier,1)
+    fourier(chani,:)=abs(fourier(chani,:))/scale(chani);
+<span class="keyword">end</span>
+meanPSD=mean(fourier,1); <span class="comment">% power spectrum, averaged over channels</span>
+[~, i50] = min(abs(freq-50));
+[~, i60] = min(abs(freq-60));
+
+snr50=2*meanPSD(i50)/(meanPSD(i50-2)+meanPSD(i50+2));
+snr60=2*meanPSD(i60)/(meanPSD(i60-2)+meanPSD(i60+2));
+<span class="keyword">if</span> meanPSD(i50)&gt;meanPSD(i60) &amp;&amp; snr50&gt;2
+    Lfreq=50;
+<span class="keyword">elseif</span> meanPSD(i60)&gt;meanPSD(i50) &amp;&amp; snr60&gt;2
+    Lfreq=60;
+<span class="keyword">else</span>
+    plot(freq,meanPSD)
+    title(<span class="string">'Power Spectrum averaged over channels'</span>)
+    error(<span class="string">'cannot makeup my mind if thhere is 50 or 60 Hz artifact. you can state it in cfg.Lfreq=50;'</span>)
+<span class="keyword">end</span>
+
+<span class="keyword">function</span> maxChani=findchanLF(fourier,freq,Lfreq)
+<span class="comment">% finds which channel has most power-line artifact</span>
+[~, BLfreq1i] = min(abs(freq-125)); <span class="comment">% index for 125Hz</span>
+[~, BLfreq2i] = min(abs(freq-145));
+[~, iLF] = min(abs(freq-Lfreq));
+scale=mean(abs(fourier(:,BLfreq1i:BLfreq2i)),2);
+[~,maxChani]=max(abs(fourier(:,iLF))./scale); <span class="comment">%round(freq)==Lfreq</span>
+
+<span class="keyword">function</span> [cleaned, mean1,noiseSamp,Artifact] = cleanLineFinternal(dataA, whereUp, epochs, method, mean0,startNum,noiseType,noiseThr,sRate,cycLength)
+</pre><h2>internal version of cleanLineF.m<a name="20"></a></h2><pre>clean the line frequency based on points at which the Mains flipped from
+negative to positive
+  [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, Mean0);
+dataA   - array with one channel of MEGdata
+whereUp - list of column indices where Line Freq changed from negative to
+         positive.  If the mark of this change comes from ExtTrig #1 it
+         may be found by:
+                         whereUp=find(diff(mod(trig5to45,511)&gt;=256)==1);
+epochs  - list of indices where the last piece ended [default [0,length(dataA)]
+method  - one of 3 possibilities:
+          'GLOBAL' - the average over the entire data is used [default]
+        'ADAPTIVE' - The averge gradually follow the mean, starting with
+                     the average over 5 sec.
+        'PHASEPRECESSION' - The data is interpolated 10 folds and the phase
+                     precession at each trig is considered
+        'FITSIZE' similar to globall but tries to adjust 50Hz amplitude cycle by cycle (moving rats)
+Mean0   - start from that mean.  If not available comput from 1-st 256
+        cycles.
+startNum- how many cycles to take for adaptive template</pre><p>cleaned - same dimension like dataA but cleaned from the line frequency           artefact. mean1   - the last mean used</p><p>noiseThr- how many std(mean(abs(data of one cycle))) to consider as           noise. default is 5 SD. sRate - needed for filter in FITSIZE method</p><pre class="codeinput"><span class="comment">% initialize</span>
+<span class="keyword">if</span> size(dataA,1)&gt;1
+    error(<span class="string">'one channel only'</span>)
+<span class="keyword">end</span>
+<span class="keyword">if</span> nargin&gt;3
+    okArgs = {<span class="string">'GLOBAL'</span>,<span class="string">'ADAPTIVE'</span>,<span class="string">'PHASEPRECESSION'</span>,<span class="string">'FITSIZE'</span>,<span class="string">'ADAPTIVE1'</span>};
+    k = find(strcmpi(method, okArgs));
+    <span class="keyword">if</span> isempty(k)
+        error(<span class="string">'MATLAB:MEGanalysis:BadParameter'</span>,<span class="keyword">...</span>
+            <span class="string">'Unknown method name:  %s.'</span>,method);
+    <span class="keyword">elseif</span> length(k)&gt;1
+        error(<span class="string">'MATLAB:MEGanalysis:BadParameter'</span>,<span class="keyword">...</span>
+            <span class="string">'Ambiguous method name:  %s.'</span>,method);
+    <span class="keyword">else</span>
+        Global=false;
+        Adaptive = false;
+        phasePrecession = false;
+        fitSize=false;
+        Adaptive1 = false;
+        <span class="keyword">switch</span>(k)
+            <span class="keyword">case</span> 1  <span class="comment">% GLOBAL</span>
+                Global=true;
+            <span class="keyword">case</span> 2 <span class="comment">% ADAPTIVE</span>
+                Adaptive = true;
+                <span class="keyword">if</span> ~exist(<span class="string">'startNum'</span>,<span class="string">'var'</span>)
+                    startNum=[];
+                <span class="keyword">end</span>
+                <span class="keyword">if</span> isempty(startNum)
+                    startNum=4000;
+                <span class="keyword">end</span>
+            <span class="keyword">case</span> 3 <span class="comment">% PhasePrecession</span>
+                phasePrecession = true;
+            <span class="keyword">case</span> 4
+                fitSize=true;
+            <span class="keyword">case</span> 5
+                Adaptive1=true;
+                <span class="keyword">if</span> ~exist(<span class="string">'startNum'</span>,<span class="string">'var'</span>)
+                    startNum=[];
+                <span class="keyword">end</span>
+                <span class="keyword">if</span> isempty(startNum)
+                    startNum=4000;
+                <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">else</span>
+    Global=true; <span class="comment">% the default</span>
+    Adaptive = false;
+    phasePrecession = false;
+<span class="keyword">end</span>
+<span class="keyword">if</span> ~exist(<span class="string">'mean0'</span>, <span class="string">'var'</span>), mean0=[]; <span class="keyword">end</span>
+<span class="keyword">if</span> ~isempty(mean0)
+    maxL = length(mean0)-1;
+<span class="keyword">else</span>
+    maxL = max(diff(whereUp));
+<span class="keyword">end</span>
+<span class="keyword">if</span> ~exist(<span class="string">'epochs'</span>, <span class="string">'var'</span>), epochs = []; <span class="keyword">end</span>
+<span class="keyword">if</span> isempty(epochs), epochs = [0, length(dataA)]; <span class="keyword">end</span>
+<span class="keyword">if</span> length(epochs)&gt;2
+    epoched = true;
+    epochS = epochs(1:end-1)+1;
+    epochE = [(epochS(2:end)-1) length(dataA)];
+<span class="keyword">else</span>
+    epoched = false;
+    epochS = epochs(1)+1;
+    epochE = epochs(2)-1;
+    <span class="keyword">if</span> length(whereUp)&lt;500 &amp;&amp; ~Global
+        warning(<span class="string">'MATLAB:MEGanalysis:ImproperCombination'</span>,<span class="keyword">...</span>
+            <span class="string">'Data is too short so only GLOBAL is allowed'</span>)
+        Global=true; <span class="comment">% the default</span>
+        Adaptive = false;
+        phasePrecession = false;
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+<span class="keyword">if</span> epoched &amp;&amp; ~Global
+    warning(<span class="string">'MATLAB:MEGanalysis:ImproperCombination'</span>,<span class="keyword">...</span>
+        <span class="string">'Data is epoched and only GLOBAL is allowed'</span>)
+    Global=true; <span class="comment">% the default</span>
+    Adaptive = false;
+    phasePrecession = false;
+<span class="keyword">end</span>
+<span class="comment">% adjust if first epoch does not start at 1</span>
+<span class="keyword">if</span> epochS(1)&gt;1
+    epochS=[1 epochS];
+    epochE = [epochS(2)-1 epochE];
+<span class="keyword">end</span>
+<span class="keyword">if</span> ~exist(<span class="string">'noiseThr'</span>,<span class="string">'var'</span>)
+    noiseThr=[];
+<span class="keyword">end</span>
+<span class="keyword">if</span> isempty(noiseThr)
+    noiseThr=5;
+<span class="keyword">end</span>
+<span class="keyword">if</span> ~exist(<span class="string">'fitSize'</span>,<span class="string">'var'</span>)
+    fitSize=[];
+<span class="keyword">end</span>
+<span class="keyword">if</span> isempty(fitSize)
+    fitSize=false;
+<span class="keyword">end</span>
+
+<span class="comment">% Clean</span>
+Artifact=zeros(size(dataA));
+<span class="keyword">if</span> Global
+    <span class="keyword">if</span> ~epoched
+        meanL=round(mean(diff(whereUp)));
+    <span class="keyword">else</span> <span class="comment">% consider only whereUp with complete cycles at each epoch</span>
+        error(<span class="string">'no support for epoched, use createCleanFile'</span>);
+    <span class="keyword">end</span>
+    <span class="comment">% lastCycleStart  = whereUp(end);</span>
+    cleaned = zeros(size(dataA));
+
+    <span class="comment">% get the mean signal per line cycle</span>
+    [meanLine,noiseSamp] = oneLineCycleInternal(dataA,whereUp,noiseType,noiseThr,cycLength);
+    <span class="comment">% subtract from signal one cycle at a time</span>
+    <span class="keyword">for</span> ii=1:length(whereUp)-1
+        iStrt = whereUp(ii);
+        iEnds = whereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=meanLine(:,1:numInThisCycle);
+        Artifact(iStrt:iEnds)=artifact;
+        cleaned(:,iStrt:iEnds) = dataA(:,iStrt:iEnds)-artifact;
+    <span class="keyword">end</span>
+    <span class="comment">% subtract the leftover tail</span>
+    lastHere=iEnds;
+    <span class="keyword">if</span> lastHere&lt;length(dataA)  <span class="comment">% clean the last piece</span>
+        lastTail = size(cleaned,2)-lastHere;
+        <span class="keyword">if</span> lastHere-iEnds+lastTail&lt;=meanL <span class="comment">% less then one cycle left</span>
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end)-<span class="keyword">...</span>
+                meanLine(:,lastHere-iEnds+1:lastHere-iEnds+lastTail);
+        <span class="keyword">else</span> <span class="comment">% treat later</span>
+            warning(<span class="string">'MATLAB:MEGanalysis:incompleteCalculations'</span>, [<span class="string">'Last '</span> num2str(lastTail) <span class="string">' Not cleaned!'</span>]);
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end);
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    mean1 = meanLine;
+<span class="keyword">elseif</span> fitSize
+    hpObj=fdesign.highpass(<span class="string">'Fst,Fp,Ast,Ap'</span>,1,40,60,1,sRate);<span class="comment">%</span>
+    Filt=design(hpObj ,<span class="string">'butter'</span>);
+    dataAhp = myFilt(dataA,Filt);
+    meanL=round(mean(diff(whereUp)));
+    firstCycleStart = whereUp(1);
+    first=1;
+    last = length(whereUp)-1;
+    cleaned = zeros(size(dataA));
+    <span class="comment">% get the mean signal per line cycle</span>
+    [meanLine,noiseSamp] = oneLineCycleInternal(dataA,whereUp,noiseType,noiseThr,cycLength);
+    meanLine=meanLine-meanLine(1);
+    <span class="comment">% find zero crossing in template</span>
+    t1=meanLine(1:end-1);
+    t2=meanLine(2:end);
+    tt=t1.*t2;
+    dt        = t2-t1;
+    indx_up   = find( (tt&lt;0) &amp; (dt&gt;0) ) ;
+    indx_down = find( (tt&lt;0) &amp; (dt&lt;0) ) ;
+    <span class="keyword">if</span> length(indx_up)==2
+        indx_up=indx_up(2);
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> length(indx_down)==2
+        indx_down=indx_down(2);
+    <span class="keyword">end</span>
+    indx1=min([indx_up indx_down]);
+    indx2=max([indx_up indx_down]);
+    numInThisCycle = firstCycleStart-1;
+    <span class="keyword">if</span> meanL==numInThisCycle
+        strtOffset=1;
+    <span class="keyword">else</span>
+        strtOffset=0;
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> epochE-whereUp(last)&gt;meanL  <span class="comment">%  add one cycle</span>
+        thisWhereUp = whereUp(first-strtOffset:(last+1));
+    <span class="keyword">else</span>
+        thisWhereUp = whereUp(first-strtOffset:last);
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> meanL&gt;numInThisCycle
+        cleaned(:,epochS:firstCycleStart-1) = dataA(:,epochS:firstCycleStart-1)<span class="keyword">...</span>
+            - meanLine(:,(meanL-numInThisCycle):meanL-1);
+        iEnds = thisWhereUp;
+    <span class="keyword">end</span>
+    <span class="keyword">for</span> ii=1:length(thisWhereUp)-1
+        iStrt = thisWhereUp(ii);
+        iEnds = thisWhereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=zeros(1,numInThisCycle);
+        artifact(1:min(indx2,numInThisCycle))=meanLine(:,1:min(indx2,numInThisCycle));
+        <span class="keyword">if</span> length(iStrt:iEnds)&lt;=length(meanLine)
+            mLtrimmed=meanLine(1:indx2);
+            mLtrimmed=mLtrimmed-(mLtrimmed(1)+mLtrimmed(end))/2;
+            rs=resample(mLtrimmed,length(iStrt:iEnds),length(mLtrimmed));
+            artifact=rs;
+            <span class="keyword">if</span> ~sum(ismember(iStrt:iEnds,noiseSamp))
+                indx_down_rs=round(indx1*length(iStrt:iEnds)/length(mLtrimmed));
+                indx_up_rs=round(indx2*length(iStrt:iEnds)/length(mLtrimmed));
+                x=rs(1,1:indx_down_rs);
+                y=dataAhp(:,iStrt:iStrt+indx_down_rs-1);
+                pU=polyfit(x,y,1);
+                x=rs(1,indx_down_rs+1:indx_up_rs);
+                y=dataAhp(:,iStrt+indx_down_rs+1:iStrt+indx_up_rs);
+                pD=polyfit(x,y,1);
+                <span class="keyword">if</span> pU(1)&gt;0.5 &amp;&amp; pU(1)&lt;1.5
+                    artifact(1:indx_down_rs)=pU(1)*rs(1,1:indx_down_rs);<span class="comment">%+pHP(2);1,1:indx_down);</span>
+                <span class="keyword">end</span>
+                <span class="keyword">if</span> pD(1)&gt;0.5 &amp;&amp; pD(1)&lt;1.5
+                    artifact(indx_down_rs+1:min([indx_up_rs,numInThisCycle]))=pD(1)*rs(1,indx_down_rs+1:min([indx_up_rs,numInThisCycle]));<span class="comment">%+pHP(2);</span>
+                <span class="keyword">end</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+        Artifact(iStrt:iEnds)=artifact;
+        cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
+    <span class="keyword">end</span>
+    <span class="comment">% subtract the leftover tail</span>
+    <span class="keyword">if</span> epochE&gt;iEnds  ; <span class="comment">%clean the tail</span>
+        lastHere = epochE;
+        cleaned(:,iEnds+1:lastHere) =<span class="keyword">...</span>
+            dataA(:,iEnds+1:lastHere)-<span class="keyword">...</span>
+            meanLine(:,1:lastHere-iEnds);
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> lastHere&lt;length(dataA)  <span class="comment">% clean the last piece</span>
+        lastTail = size(cleaned,2)-lastHere;
+        <span class="keyword">if</span> lastHere-iEnds+lastTail&lt;=meanL <span class="comment">% less then one cycle left</span>
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end)-<span class="keyword">...</span>
+                meanLine(:,lastHere-iEnds+1:lastHere-iEnds+lastTail);
+        <span class="keyword">else</span> <span class="comment">% treat later</span>
+            warning(<span class="string">'MATLAB:MEGanalysis:incompleteCalculations'</span>, [<span class="string">'Last '</span> num2str(lastTail) <span class="string">' Not cleaned!'</span>]);
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end);
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    mean1 = meanLine;
+<span class="keyword">elseif</span> Adaptive
+</pre><h2>generate a slowly changing average<a name="21"></a></h2><pre class="codeinput">    cleaned = dataA;
+    <span class="comment">%    startNum=256;</span>
+    numCycles = length(whereUp);
+    Q = 1-1/startNum;
+    sum1 = zeros(1,maxL+1);
+    ml1 = nan(numCycles,maxL +1);
+    <span class="keyword">if</span> ~exist(<span class="string">'mean0'</span>, <span class="string">'var'</span>)
+        mean0 = [];
+    <span class="keyword">else</span>
+        <span class="keyword">if</span> sum(abs(mean0))==0, mean0=[]; <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    <span class="comment">% Estimate noise</span>
+    <span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>)
+        <span class="keyword">for</span> cycle = 1:(numCycles-2)
+            startCycle = whereUp(cycle);
+            amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); <span class="comment">%#ok&lt;AGROW&gt;</span>
+        <span class="keyword">end</span>
+        amp2=(amp1-mean(amp1))./std(amp1);
+        noise=min(amp1(amp2&gt;=noiseThr));
+        <span class="keyword">if</span> isempty(noise)
+            noise=max(amp1); <span class="comment">% to accept all segments</span>
+        <span class="keyword">end</span>
+    <span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>)
+        noise=std(dataA)*noiseThr;
+    <span class="keyword">end</span>
+    <span class="comment">% compute a simple average</span>
+    noiseSamp=[];
+    <span class="keyword">if</span> isempty(mean0)  <span class="comment">% compute for the first 256 (or startNum)</span>
+        cycCount=0;
+        <span class="keyword">for</span> cycle = 1:startNum
+            startCycle = whereUp(cycle);
+            <span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>) &amp;&amp; mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))&lt;=noise
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycCount=cycCount+1;
+            <span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>) &amp;&amp; sum(abs((dataA(startCycle:startCycle+maxL)))&gt;=noise)==0
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycCount=cycCount+1;
+            <span class="keyword">else</span>
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; <span class="comment">%#ok&lt;*AGROW&gt;</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+        ml1(1:startNum,:) = repmat(sum1/cycCount,startNum,1);
+    <span class="keyword">else</span> <span class="comment">% mean0 was provided</span>
+        <span class="comment">% check that OK</span>
+        r = size(mean0,1);
+        <span class="keyword">if</span> r==1 <span class="comment">% a row vector - transpose</span>
+            mean0 = mean0';
+            r = size(mean0,1);
+        <span class="keyword">end</span>
+        <span class="keyword">if</span> r~= length(sum1)
+            error(<span class="string">'MATLAB:MEGanalysis:ImproperParam'</span>,<span class="keyword">...</span>
+                <span class="string">'The initial mean must be %d long'</span>, length(sum1))
+        <span class="keyword">end</span>
+        ml1(1:startNum,:) = repmat(mean0',startNum,1);
+    <span class="keyword">end</span>  <span class="comment">% end of getting the first startNum averages</span>
+    <span class="comment">% continue in adaptive way</span>
+    <span class="keyword">for</span> cycle = startNum+1:numCycles
+        startCycle = whereUp(cycle);
+        <span class="keyword">if</span> startCycle+maxL &lt;= size(dataA,2)
+            <span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>) &amp;&amp; mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))) &lt;= noise
+                ml1(cycle,:) = Q*ml1(cycle-1,:) + dataA(startCycle:startCycle+maxL)/startNum;
+            <span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>) &amp;&amp; sum(abs((dataA(startCycle:startCycle+maxL)))&gt;=noise)==0
+                ml1(cycle,:) = Q*ml1(cycle-1,:) + dataA(startCycle:startCycle+maxL)/startNum;
+            <span class="keyword">else</span>
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)];
+                ml1(cycle,:)=ml1(cycle-1,:);
+            <span class="keyword">end</span>
+        <span class="keyword">else</span> <span class="comment">% extra cycles copy the previous one</span>
+            ml1(cycle,:)=ml1(cycle-1,:);  <span class="comment">% copy the last one</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    <span class="comment">% BL correction for template</span>
+    <span class="keyword">for</span> tempi=1:size(ml1,1)
+        ml1(tempi,:)=ml1(tempi,:)-mean(ml1(tempi,1:cycLength));
+    <span class="keyword">end</span>
+    <span class="keyword">for</span> ii=1:length(whereUp)-1
+        iStrt = whereUp(ii);
+        iEnds = whereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=ml1(ii,1:numInThisCycle);
+        cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
+        Artifact(iStrt:iEnds)=artifact;
+    <span class="keyword">end</span>
+    <span class="comment">% treat the edges</span>
+    <span class="keyword">if</span> whereUp(1)&gt;1  <span class="comment">%header before first whereUp</span>
+        numInHeader = whereUp(1)-1;
+        artifact=ml1(1,end-numInHeader+1:end);
+        cleaned(1:numInHeader) = dataA(1:numInHeader)-artifact;
+        Artifact(1:numInHeader)=artifact;
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> whereUp(end)&lt;length(dataA) <span class="comment">% tail after whereUp</span>
+        numInTail = length(dataA)-whereUp(end);
+        artifact=ml1(end, end-numInTail:end);
+        cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
+        Artifact(end-numInTail:end)=artifact;
+    <span class="keyword">end</span>
+    mean1 = ml1(end,:);
+</pre><pre class="codeinput"><span class="keyword">elseif</span> phasePrecession
+    interpNo =10; <span class="comment">% How many interpolation points between samples</span>
+    [cleaned, mean1,Artifact] = cleanWphaseInternal(dataA,whereUp,interpNo);
+    noiseSamp=<span class="string">'not available for phasePrecession'</span>;
+<span class="keyword">elseif</span> Adaptive1
+</pre><h2>similar to adaptive but makes an average of last 2000 and next 2000 (Ncycles/2) cycles. not as good for an unknown reason.<a name="23"></a></h2><pre class="codeinput">    cleaned = dataA;
+    numCycles = length(whereUp);
+    sum1 = zeros(1,maxL+1);
+    ml1 = nan(numCycles,maxL +1);
+    <span class="keyword">if</span> ~exist(<span class="string">'mean0'</span>, <span class="string">'var'</span>)
+        mean0 = [];
+    <span class="keyword">else</span>
+        <span class="keyword">if</span> sum(abs(mean0))==0, mean0=[]; <span class="keyword">end</span>
+    <span class="keyword">end</span>
+    <span class="comment">% Estimate Noise</span>
+    <span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>)
+        <span class="keyword">for</span> cycle = 1:(numCycles-2)
+            startCycle = whereUp(cycle);
+            amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); <span class="comment">%#ok&lt;AGROW&gt;</span>
+        <span class="keyword">end</span>
+        amp2=(amp1-mean(amp1))./std(amp1);
+        noise=min(amp1(amp2&gt;=noiseThr));
+        <span class="keyword">if</span> isempty(noise)
+            noise=max(amp1); <span class="comment">% to accept all segments</span>
+        <span class="keyword">end</span>
+    <span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>)
+        noise=std(dataA)*noiseThr;
+    <span class="keyword">end</span>
+</pre><h2>compute a simple average<a name="24"></a></h2><pre class="codeinput">    noiseSamp=[];
+    <span class="keyword">if</span> isempty(mean0)  <span class="comment">% compute for the first 256 (or startNum)</span>
+        cycCount=0;
+        cycle=0;
+        <span class="keyword">while</span> cycCount &lt; startNum
+            cycle=cycle+1;
+            startCycle = whereUp(cycle);
+            <span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>) &amp;&amp; mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))&lt;=noise
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycle=cyc+1;
+            <span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>) &amp;&amp; sum(abs((dataA(startCycle:startCycle+maxL)))&gt;=noise)==0
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycCount=cycCount+1;
+            <span class="keyword">else</span>
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; <span class="comment">%#ok&lt;*AGROW&gt;</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+        currentCycle=cycle-floor(startNum/2);
+        ml1(1:currentCycle,:) = repmat(sum1/cycCount,currentCycle,1);
+    <span class="keyword">else</span> <span class="comment">% mean0 was provided</span>
+        error(<span class="string">'no mean0 allowed'</span>)
+    <span class="keyword">end</span>  <span class="comment">% end of getting the first startNum averages</span>
+    <span class="comment">% continue in adaptive way</span>
+    <span class="keyword">for</span> cycle = cycle+1:numCycles
+        startCycle = whereUp(cycle);
+        <span class="keyword">if</span> startCycle+maxL &lt;= size(dataA,2)
+            <span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>) &amp;&amp; mean(abs(dataA(startCycle:startCycle+maxL)<span class="keyword">...</span>
+                    -mean(dataA(startCycle:startCycle+maxL)))) &lt;= noise
+                <span class="comment">%ml1(cycle,:) = Q*ml1(cycle-1,:) + ...</span>
+                <span class="comment">%    dataA(startCycle:startCycle+maxL)/startNum;</span>
+                sum1=sum1-ml1(cycle-startNum,:)+dataA(startCycle:startCycle+maxL);
+                ml1(currentCycle,:)=sum1./startNum;
+                <span class="comment">%prev=dataA(startCycle:startCycle+maxL);</span>
+            <span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>) &amp;&amp; sum(abs((dataA(startCycle:startCycle+maxL)))&gt;=noise)==0
+                sum1=sum1-ml1(cycle-startNum,:)+dataA(startCycle:startCycle+maxL);
+                ml1(currentCycle,:)=sum1./startNum;
+                <span class="comment">%prev=dataA(startCycle:startCycle+maxL);</span>
+            <span class="keyword">else</span>
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)];
+                ml1(currentCycle,:)=ml1(currentCycle-1,:);
+            <span class="keyword">end</span>
+        <span class="keyword">else</span> <span class="comment">% extra cycles copy the previous one</span>
+            ml1(currentCycle,:)=ml1(currentCycle-1,:);  <span class="comment">% copy the last one</span>
+        <span class="keyword">end</span>
+        currentCycle=currentCycle+1;
+    <span class="keyword">end</span>
+    ml1(currentCycle:numCycles,:) = repmat(ml1(currentCycle-1,:),numCycles-currentCycle+1,1);
+    <span class="comment">% BL correction for template</span>
+    <span class="keyword">for</span> tempi=1:size(ml1,1)
+        ml1(tempi,:)=ml1(tempi,:)-mean(ml1(tempi,1:cycLength));
+    <span class="keyword">end</span>
+    <span class="keyword">for</span> ii=1:length(whereUp)-1
+        iStrt = whereUp(ii);
+        iEnds = whereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=ml1(ii,1:numInThisCycle);
+        cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
+        Artifact(iStrt:iEnds)=artifact;
+    <span class="keyword">end</span>
+    <span class="comment">% treat the edges</span>
+    <span class="keyword">if</span> whereUp(1)&gt;1  <span class="comment">%header before first whereUp</span>
+        numInHeader = whereUp(1)-1;
+        artifact=ml1(1,end-numInHeader+1:end);
+        cleaned(1:numInHeader) = dataA(1:numInHeader)-artifact;
+        Artifact(1:numInHeader)=artifact;
+    <span class="keyword">end</span>
+    <span class="keyword">if</span> whereUp(end)&lt;length(dataA) <span class="comment">% tail after whereUp</span>
+        numInTail = length(dataA)-whereUp(end);
+        artifact=ml1(end, end-numInTail:end);
+        cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
+        Artifact(end-numInTail:end)=artifact;
+    <span class="keyword">end</span>
+    mean1 = ml1(end,:);
+</pre><pre class="codeinput"><span class="keyword">else</span>
+    error(<span class="string">'MATLAB:MEGanalysis:unknownParam'</span>,<span class="string">'method was not defined'</span>)
+<span class="keyword">end</span>
+</pre><pre class="codeinput"><span class="keyword">function</span> [meanLine,noiseSamp,cycCount] = oneLineCycleInternal(dataA, whereUp,noiseType,noiseThr,cycLength)
+</pre><h2>internal version of oneLineCycle<a name="27"></a></h2><p>average all cycles of 50Hz</p><p>dataA    - nChannelsXmSamples whereUp  - list of indices where the 50Hz goes up noiseType- 'cyc' or 'samp', better use samp but only when no low freq artifact is present noiseThr - noise Threshold in z scores, needed also for cyc</p><pre class="codeinput"><span class="comment">% meanLine - the mean triggered on the 50hz up stroke</span>
+<span class="comment">% noiseSamp- are samples which are members of noisy cycles</span>
+<span class="comment">% cycCount - the number of good cycles</span>
+
+
+<span class="comment">% Sep-2008  MA</span>
+<span class="comment">% May-2014  YH added noise rejection</span>
+<span class="comment">% initialize</span>
+<span class="keyword">if</span> ~exist(<span class="string">'noiseThr'</span>,<span class="string">'var'</span>)
+    noiseThr=[];
+<span class="keyword">end</span>
+<span class="keyword">if</span> isempty(noiseThr)
+    noiseThr=5;
+<span class="keyword">end</span>
+
+maxL=round(1.25*cycLength);
+[nChannels,~] = size(dataA);
+numCycles = length(whereUp)-2;
+sum1 = zeros(nChannels,maxL+1);
+<span class="comment">% Estimate noise</span>
+<span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>)
+    <span class="keyword">for</span> cycle = 1:(numCycles-2)
+        startCycle = whereUp(cycle);
+        amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); <span class="comment">%#ok&lt;AGROW&gt;</span>
+    <span class="keyword">end</span>
+    amp2=(amp1-mean(amp1))./std(amp1);
+    noise=min(amp1(amp2&gt;=noiseThr));
+    <span class="keyword">if</span> isempty(noise)
+        noise=max(amp1); <span class="comment">% to accept all segments</span>
+    <span class="keyword">end</span>
+<span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>)
+    noise=std(dataA)*noiseThr;
+<span class="keyword">end</span>
+<span class="comment">% average</span>
+cycCount=0;
+noiseSamp=[];
+<span class="keyword">if</span> strcmp(noiseType,<span class="string">'cyc'</span>)
+    <span class="keyword">for</span> cycle = 1:numCycles
+        startCycle = whereUp(cycle);
+        <span class="keyword">if</span> startCycle+maxL &lt;= size(dataA,2)
+            <span class="keyword">if</span> mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))&lt;=noise
+                cycCount=cycCount+1;
+                sum1 = sum1 + dataA(:,startCycle:startCycle+maxL);
+            <span class="keyword">else</span>
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; <span class="comment">%#ok&lt;*AGROW&gt;</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">elseif</span> strcmp(noiseType,<span class="string">'samp'</span>)
+    <span class="keyword">for</span> cycle = 1:numCycles
+        startCycle = whereUp(cycle);
+        <span class="keyword">if</span> startCycle+maxL &lt;= size(dataA,2)
+            <span class="keyword">if</span> sum(abs((dataA(startCycle:startCycle+maxL)))&gt;=noise)==0
+                cycCount=cycCount+1;
+                sum1 = sum1 + dataA(1,startCycle:startCycle+maxL);
+            <span class="keyword">else</span>
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; <span class="comment">%#ok&lt;*AGROW&gt;</span>
+            <span class="keyword">end</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+meanLine = sum1/cycCount;
+</pre><pre class="codeinput"><span class="keyword">function</span>  [xClean, mean1,Artifact] = cleanWphaseInternal(x,whereUp,interpNo)
+</pre><h2>clean periodic signal from x, allow phase precession<a name="29"></a></h2><pre class="codeinput"><span class="comment">% Oct-2010  MA</span>
+
+<span class="comment">% initialize</span>
+<span class="keyword">if</span> ~exist(<span class="string">'interpNo'</span>,<span class="string">'var'</span>), interpNo=[]; <span class="keyword">end</span>
+<span class="keyword">if</span> isempty(interpNo), interpNo = 10; <span class="keyword">end</span>
+
+xInt = interp(x,interpNo);
+whereUpInt = interpNo*(whereUp-1) +1;
+
+
+<span class="comment">% find the mean</span>
+[phasePerSample, phaseAtTrig] = findPhasePrecession(whereUpInt);
+[mean3cycles, zeroAt] = findMeanCycle(xInt, whereUpInt, 1);
+
+<span class="comment">% clean 1 cycle at a time</span>
+Artifact=zeros(size(x));
+<span class="keyword">for</span> iTrig = 1:length(whereUp)-1
+    xI0 = whereUpInt(iTrig);
+    xI1 = whereUpInt(iTrig+1)-1;
+    phase0 = phaseAtTrig(iTrig);
+    <span class="comment">% phase1 = phaseAtTrig(iTrig+1);</span>
+    <span class="comment">% find the closest index</span>
+    i0 = round(phase0/phasePerSample)+zeroAt;
+    i1 = i0 +(xI1-xI0);
+    <span class="comment">%i1 = round((phase1-zeroAt)/phasePerSample);</span>
+    xInt(xI0:xI1) = xInt(xI0:xI1)-mean3cycles(i0:i1);
+    Artifact(xI0:xI1)=mean3cycles(i0:i1);
+<span class="keyword">end</span>
+
+
+<span class="comment">% treat the edges</span>
+<span class="comment">% the beginning</span>
+<span class="keyword">if</span> whereUpInt(1)&gt;1
+    xI0 = 1;
+    xI1 = whereUpInt(1)-1;
+    phase0 = phaseAtTrig(1)- xI1*phasePerSample;
+    <span class="comment">% phase1 = phaseAtTrig(1);</span>
+    i0 = round(phase0/phasePerSample) +zeroAt;
+    i1 = i0 +(xI1-xI0);
+    xInt(xI0:xI1) = xInt(xI0:xI1)-mean3cycles(i0:i1);
+    Artifact(xI0:xI1)=mean3cycles(i0:i1);
+<span class="keyword">end</span>
+<span class="comment">% the end</span>
+
+<span class="keyword">if</span> whereUpInt(end)&lt;length(xInt)
+    xI1 = length(xInt);
+    xI0 = whereUpInt(end)+1;
+    <span class="comment">% phase1 = xI1*phasePerSample -phaseAtTrig(end);</span>
+    phase0 = phaseAtTrig(end);
+    i0 = round(phase0/phasePerSample) +zeroAt;
+    i1 = i0 +(xI1-xI0);
+    xInt(xI0:xI1) = xInt(xI0:xI1)-mean3cycles(i0:i1);
+    Artifact(xI0:xI1)=mean3cycles(i0:i1);
+<span class="keyword">end</span>
+
+<span class="comment">% wrap up</span>
+xClean = xInt(1:10:end);
+mean1 = mean3cycles;
+</pre><pre class="codeinput"><span class="keyword">function</span> variable=default(field,value,cfg)
+</pre><h2>set default parameters<a name="31"></a></h2><pre class="codeinput"><span class="keyword">if</span> isfield(cfg,field)
+    eval([<span class="string">'variable=cfg.'</span>,field,<span class="string">';'</span>])
+<span class="keyword">else</span>
+    variable=value;
+<span class="keyword">end</span>
+</pre><img vspace="5" hspace="5" src="correctLF_01.png" alt=""> <p class="footer"><br>
+      Published with MATLAB&reg; 7.13<br></p></div><!--
+##### SOURCE BEGIN #####
+function [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg)
+% [cleanData,whereUp,noiseSamp,Artifact]=correctLF(data,sRate,chanLF,cfg);
+% see more examples below
+%
+%% Cleaning line frequencies (LF) from MEG / EEG data without filters
+% The function detects zero crossing of power line artifact cycles (of 50 or 60Hz)
+% and averages the cycles. This average serves as a template noise pattern.
+% Subtracting it from each cycle removes the 50Hz artifact and its harmonics (100, 150, 200...)
+%
+%% Input
+% 4D users can use the function without input arguments. It find the
+% current 'c,*', finds the sampling rate, and detects 50Hz cycles on a ref
+% channel. Use input arguments when not using default parameters.
+%
+%   -  data is MEG or EEG data, rows for channels.
+%      it can be a 4D filename 'c,rfhp0.1Hz', a saved data matrix 'data.mat'.
+%      or the data matrix itself (less RAM friendly).
+%   -  sRate is sampling rate.
+%   -  chanLF is a channel containing detectable 50 or 60Hz. It can be an
+%      MEG reference channel. Leave empty to detect the noisiest channel
+%      automatically. It can be the index of your dirty channel, when this
+%      is one of the channels you want to clean. When the line frequency is
+%      hard to detect on any channel use chanLF='time'. LF cycles will not be
+%      searched for in the data. Averaging will be based on fixed latencies
+%      (20ms for 50Hz artifact). This is best used with low Ncycles (250).
+%   -  cfg is an optional structure with the following possible fields:
+%       *   cfg.method is 'GLOBAL' or 'ADAPTIVE' (default, see tal & Abeles, 2013).
+%           ADAPTIVE allows the shape of the 50Hz artifact to slowly change
+%           along the recording. GLOBAL assumes steady artifact, good for
+%           short recordings.'FITSIZE' can be used in extreme cases (moving
+%           rats), take care there. 'ADAPTIVE1' is moving a sliding window,
+%           averager. It seems to be less effective than ADAPTIVE.
+%       *   cfg.Ncycles can be used with ADAPTIVE and ADAPTIVE1, specifying
+%           how many cycles to average for creating a template. 4000 has no
+%           over cleaning (notch) at all, which is good. but some artifact may remain.
+%           I wouldn't use less than 250 cycles, because it may result in a
+%           50Hz notch. default is 400.
+%       *   cfg.Lfreq is the noise frequency, 50 or 60. by default the Lfreq is
+%           detected automatically.
+%       *   cfg.jobs is for parallel processing with parfor, the number of
+%           CPU to use.
+%       *   cfg.hpFreq is the low cutoff of a highpass filter. This means
+%           that you want to filter the data before cleaning. cfg.hpFreq=0.1
+%           is recommended good for DC recordings.
+%       *   cfg.noiseType is 'samp' (default) or 'cyc', to test noise sample by
+%           sample or cycle by cycle. noisy samples or cycles are cleaned,
+%           but their data is not used when creating the noise template.
+%           'samp' is not efficient when you have a lot of low freq noise
+%           (unfiltered DC recording).
+%       *   cfg.noiseThr is how many SD for a channel to consider as noise threshold.
+%           When cfg.noiseType='cyc', SD is std(mean(abs(data of one cycle))).
+%       *   cfg.blc is baseline correction before work on data. it can be 'none',
+%           'median' (default), 'mean' or [time0 time1] to remove the mean of a
+%           certain time window.
+%       *   cfg.BLfreq ([125 145]) is the limits of baseline frequencies by which to
+%           normalize the fft when plotting. does not change the cleaning itself.
+%           This was added for neuromag, to integrate mag and grad channels.
+%       *   cfg.reverse is for running the cleaning forward and reverse in
+%           order to clean the beginning of the file better, where you
+%           cannot clean adaptively using only forward sweap. default is
+%           false.
+%
+%% Output
+%   -   cleanData is what it is
+%   -   whereUp is a vector with samples where zero crossing was detected
+%   -   noiseSamp samples where noise was detected
+%   -   Artifact possible for one channel data only, it is the estimated
+%       artifact (chained templates)
+%% Examples
+%
+% cleanData=correctLF('data.mat',1017.25,trig);
+% where trig is a digital channel recording the power line zero crossing, 1017.25
+% is the sampling rate. In data.mat you have a matrix with rows for channels
+%
+% cleanData=correctLF(EEGdata,1000);
+% Here we find which EEG channel has most power line artifact and zero
+% crossing is assessed for it.
+%
+% cleanData=correctLF; 4D MEG users. it will find the REF channel with most 50Hz
+% (or 60) and clean the MEG. to save it to 4D file format use rewrite_pdf(cleanData).
+%
+%
+% Yuval Harpaz Dec 2014
+
+
+%% set defaults
+if ~exist ('chanLF','var')
+    chanLF=[];
+end
+if ~exist('cfg','var')
+    cfg={};
+end
+Lfreq      =default('Lfreq',[],cfg); % test if 50 or 60Hz
+method     =default('method','ADAPTIVE',cfg); %average
+if isfield(cfg,'Ncycle') % spelling error
+    Ncycles=default('Ncycle',400,cfg);
+else
+    Ncycles=default('Ncycles',400,cfg);
+end
+jobs       =default('jobs',[],cfg); % no parallel processing
+hpFreq     =default('hpFreq',[],cfg); % no high pass filter
+noiseThr   =default('noiseThr',5,cfg); % 5 SD as noise threshold
+noiseType  =default('noiseType','samp',cfg); % tests noise by sample
+blc        =default('blc','median',cfg);
+BLfreq        =default('BLfreq',[125 145],cfg);
+reverse        =default('reverse','false',cfg);
+if strcmpi(method,'FITSIZE')
+    lookForLag=true;
+else
+    lookForLag=false;
+end
+
+%% try to load data file and check if 4D-neuroimaging data
+if ~exist('data','var')
+    data=[];
+    sRate=[];
+end
+if ischar(data)
+    if strcmp(data(end-3:end),'.mat') % read matrix from file 'data.mat'
+        PWD=pwd;
+        display(['loading ',PWD,'/',data,]);
+        data=load(['./',data]);
+        dataField=fieldnames(data);
+        eval(['data=data.',dataField{1,1},';']);
+    else % read 4D data from file name specified in 'data'
+        cloc=strfind(data,'c');
+        comaloc=strfind(data,',');
+        if ~isempty(cloc) && ~isempty(comaloc)
+            if comaloc(end)>cloc(1)
+                var4DfileName=data;
+            end
+        end
+    end
+end
+if isempty(data) || exist('var4DfileName','var');
+    if ~exist('var4DfileName','var');
+        try
+            var4DfileName=ls('hb_c,*');
+        catch
+            var4DfileName=ls('c,*');
+        end
+        var4DfileName=['./',var4DfileName(1:end-1)];
+    end
+    var4Dp=pdf4D(var4DfileName);
+    sRate=double(get(var4Dp,'dr'));
+    var4Dhdr = get(var4Dp, 'header');
+    var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
+    var4Dchi = channel_index(var4Dp, 'meg', 'name');
+    display(['reading ',var4DfileName]);
+    data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);%,var4Dchi);
+    if isempty(chanLF)
+        var4Dlabels={'MCxaA','MCyaA','MCzaA','MLxaA','MLyaA','MLzaA','MRxaA','MRyaA','MRzaA'};
+        var4DchiRef = channel_index(var4Dp,var4Dlabels, 'name');
+        var4Dref = read_data_block(var4Dp,[1 var4DnSamp],var4DchiRef);%,var4Dchi);
+        
+        [FourRef,Fref]=fftBasic(var4Dref,round(sRate));
+        if isempty(Lfreq)
+            Lfreq=findLfreq(FourRef,Fref);
+        end
+        if isempty(chanLF)
+            maxChani=findchanLF(FourRef,Fref,Lfreq);
+        end
+        chanLF=var4Dref(maxChani,:);
+        display(['selected ',var4Dlabels{maxChani},' as Line Freq cue'])
+    end
+    clear var4D*
+end
+if isempty(jobs) || size(data,1)==1
+    par=false;
+else
+    if jobs>1
+        par=true;
+    else
+        par=false;
+    end
+end
+%% find chans with no obvious problems and compute meanPSD
+
+testSamp=min([round(sRate) size(data,2)]);
+for chani=1:size(data,1)
+    good(chani)=true; %#ok<AGROW>
+    if isequal(data(chani,1:testSamp),uint16(data(chani,1:testSamp))) || length(unique(data(chani,1:testSamp)))<20
+        good(chani)=false; %#ok<AGROW>
+    end
+end
+good=find(good);
+%% if requested make hp filter
+if ~isempty(hpFreq);
+    display('filtering')
+    HighPassSpecObj=fdesign.highpass('Fst,Fp,Ast,Ap',0.001,hpFreq,60,1,sRate);%
+    HighPassFilt=design(HighPassSpecObj ,'butter');
+    % BL correction for 1st sec window to avoid ripples in the beginning
+    for chani=1:size(data,1)
+        data(chani,:)=data(chani,:)-mean(data(chani,1:round(sRate)));
+    end
+    data = myFilt(data,HighPassFilt);
+end
+%% test 50Hz or 60Hz
+display('computing fft')
+% check size not to overload
+dSize=size(data,1)*size(data,2);
+if dSize>500000000
+    fftLength=round(500000000/size(data,1));
+    display(['lots of data, displaying fft only for about ',num2str(round(fftLength/sRate/60)),'min'])
+else
+    fftLength=size(data,2);
+end
+[Four,F]=fftBasic(data(good,1:fftLength),round(sRate));
+[~, BLfreq1i] = min(abs(F-BLfreq(1))); % index for 125Hz
+[~, BLfreq2i] = min(abs(F-BLfreq(2)));
+scale=mean(abs(Four(:,BLfreq1i:BLfreq2i)),2);
+if isempty(Lfreq);
+    display('filtering and searching for line frequency')
+    [Lfreq,meanPSD]=findLfreq(Four,F);
+    disp(['line frequency is ',num2str(Lfreq),'Hz'])
+else
+    
+    FourScaled=zeros(size(Four));
+    for chani=1:size(Four,1)
+        FourScaled(chani,:)=abs(Four(chani,:))/scale(chani);
+    end
+    meanPSD=mean(FourScaled,1);
+end
+display('done fft, preparing LF time indices')
+%% find LF cycles on a filtered channel
+lookForLF=true;
+
+if  isempty(chanLF);
+    %[Four,F]=fftBasic(data(good,:),round(sRate));
+    
+    maxChani=findchanLF(Four,F,Lfreq);
+    chanLF=data(good(maxChani),:);
+    display(['selected chan index ',num2str(good(maxChani)),' as Line Freq cue'])
+elseif ischar(chanLF)
+    if strcmpi(chanLF,'time')
+        start=double(1):sRate/Lfreq:double(size(data,2));
+        whereUp=round(start);
+        lookForLF=false;
+    elseif strcmp(chanLF(end-3:end),'.mat')
+        chanLF=load(['./',data]);
+        dataField=fieldnames(chanLF);
+        eval(['chanLF=chanLF.',dataField{1,1},';']);
+    else
+        error('could not figure out what to do with chanLF string')
+    end
+elseif length(chanLF)==1;
+    chanLF=data(chanLF,:);
+end
+if lookForLF
+    if length(unique(chanLF))==2 % zero crossing is coded in chanLF (trigger channel)
+        trigShift=zeros(size(chanLF));
+        trigShift(2:end)=chanLF(1:end-1);
+        trigShift=uint16(trigShift);
+        whereUp=find((uint16(chanLF)-trigShift)>0);
+        if max(diff(whereUp))>sRate/Lfreq+3 || min(diff(whereUp))<sRate/Lfreq-3
+            warning('some triggers are at irregular times')
+        end
+    else
+        if ~exist('BPfilt','var')
+            BPobj=fdesign.bandpass(...
+                'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
+                Lfreq-10,Lfreq-5,Lfreq*2+5,Lfreq*2+10,60,1,60,sRate);
+            BPfilt=design(BPobj ,'butter');
+        end
+        chanLFf=myFilt(chanLF-mean(chanLF(1:round(sRate))),BPfilt);
+        chanLFShift=[0,chanLFf(1:end-1)];
+        logsum=chanLFf>0;
+        logsum2=chanLFShift<0;
+        whereUp=logsum+logsum2==2;
+        whereUp=find(whereUp);
+    end
+end
+cycLength=round(sRate/Lfreq);
+%% check that whereUp is OK. if not, find cycles by template matching
+cycInterval=1000*mean(diff(whereUp))/sRate;
+if ~round(cycInterval)==1000/Lfreq
+    warning('whereUp has wrong frequency')
+end
+badCue=find(diff(whereUp)>1.2*sRate/Lfreq);
+if ~isempty(badCue)
+    whereUpOld=whereUp;
+    % try matching a template
+    Fp1=round(Lfreq*0.67);  % 34Hz highpass
+    Fp2=round(Lfreq*2.33); % 117Hz low pass
+    ObjData=fdesign.bandpass(...
+        'Fst1,Fp1,Fp2,Fst2,Ast1,Ap,Ast2',...
+        1,Fp1,Fp2,Fp2+10,60,1,60,sRate);
+    %ObjData=fdesign.highpass('Fst,Fp,Ast,Ap',1,round(Lfreq*0.67),60,1,sRate);%
+    Filt=design(ObjData ,'butter');
+    chanLFhp = myFilt(chanLF,Filt);
+    cycCount=0;
+    temp=zeros(1,round(sRate/Lfreq));
+    for upi=round(1:sRate/Lfreq:sRate*5)
+        cycCount=cycCount+1;
+        temp(cycCount,:)=chanLFhp(upi:upi+round(sRate/Lfreq)-1);
+    end
+    temp=mean(temp,1);
+    display('matching template artifact to trace, to find zero crossing')
+    [~,signal]=match_temp(chanLFhp,temp,1);
+    [~, IpeaksPos]=findPeaks(signal,0,round(0.75*length(temp))); % no peaks closer than 60% of period
+    [~, IpeaksNeg]=findPeaks(-signal,0,round(0.75*length(temp)));
+    if std(diff(IpeaksPos))<std(diff(IpeaksNeg))
+        Ipeaks=IpeaksPos;
+    else
+        Ipeaks=IpeaksNeg;
+    end
+    if std(diff(Ipeaks))>0.2*sRate/Lfreq
+        warning('std of cue interval is large')
+    end
+    whereUp=Ipeaks-round(cycLength/4);
+    if whereUp(1)<1
+        whereUp=whereUp(2:end);
+    end
+    badCueTemp=find(diff(whereUp)>ceil(1.3*sRate/Lfreq));
+    if length(badCueTemp)>1.1*length(badCue)
+        disp('template match did not do good, reverting to previous whereUp')
+        whereUp=whereUpOld;
+    end
+end
+
+cycInterval=1000*mean(diff(whereUp))/sRate;
+if ~round(cycInterval)==1000/Lfreq
+    error('whereUp has wrong frequency')
+end
+if whereUp(1)>(ceil(sRate/Lfreq)+1)
+    diary LFlog.txt
+    disp('first LF index is away from the beginning, guessing first cycles')
+    diary off
+    firstInd=fliplr(round(double(whereUp(1)):-mean(diff(whereUp)):1));
+    whereUp=[firstInd(1:end-1),whereUp];
+end
+if (size(data,2)-whereUp(end))>(ceil(sRate/Lfreq)+1)
+    diary LFlog.txt
+    disp('last LF index is away from the end, guessing last cycles')
+    diary off
+    lastInd=round(double(whereUp(end)):mean(diff(whereUp)):size(data,2));
+    whereUp=[whereUp,lastInd(2:end)];
+end
+badCue=find(diff(whereUp)>ceil(1.3*sRate/Lfreq));
+if ~isempty(badCue)
+    diary LFlog.txt
+    disp(['irregular interval between cues at (seconds): ',num2str(whereUp(badCue)/sRate)])
+    diary off
+end
+
+%% prepare parallel processing
+%figure;plot(oneLineCycleInternal(data,whereUp(2000:6000),noiseType,5,cycLength))
+if par
+    closeLabs=false;
+    try
+        nCPU=matlabpool('size'); % 0 if no matlabpool yet;
+    catch
+        disp('could not find "matlabpool". Setting "nCPU" to 1')
+        nCPU=1;
+    end
+    if nCPU==0
+        closeLabs=true;
+        if isempty(jobs)
+            try
+                matlabpool;
+                jobs=matlabpool('size');
+            catch
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
+        else
+            try
+                matlabpool ('open', jobs);
+            catch
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
+        end
+    else
+        if isempty(jobs)
+            try
+                jobs=matlabpool('size');
+            catch
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
+        elseif nCPU~=jobs
+            try
+                matlabpool close
+                %matlabpool('local',jobs);
+                matlabpool ('open', jobs)
+            catch %#ok<*CTCH>
+                jobs=1;
+                warning('cannot get matlabpool to work, define parallel for your matlab to work faster')
+            end
+        end
+    end
+end
+%% baseline correction if requested
+if ischar(blc)
+    if strcmp(blc,'none')
+        % no baseline correction
+    elseif strcmp(blc,'median')
+        for chani=1:size(data,1)
+            data(chani,:)=data(chani,:)-median(data(chani,:));
+        end
+    elseif strcmp(blc,'mean')
+        for chani=1:size(data,1)
+            data(chani,:)=data(chani,:)-mean(data(chani,:));
+        end
+    end
+elseif size(blc,1)*size(blc,2)==2
+    blc0=round(blc(1)*sRate);
+    blc1=round(blc(2)*sRate);
+    if blc0==0
+        blc0=1;
+    end
+    for chani=1:size(data,1)
+        data(chani,:)=data(chani,:)-mean(data(chani,blc0:blc1));
+    end
+end
+%% cleaning the data
+% estimate zero crossing on averaged cycle
+lag=zeros(1,size(data,1)); % not zero for FITSIZE method
+if lookForLag % for FITSIZE
+    for chani=1:size(data,1)
+        meanLine=oneLineCycleInternal(data(chani,:),whereUp,noiseType,noiseThr,cycLength);
+        meanLine=meanLine-mean(meanLine(1:cycLength));
+        t1=meanLine(1:end-1);
+        t2=meanLine(2:end);
+        tt=t1.*t2;
+        indx=find(tt<0); % all zero crossings
+        indx=[round(cycLength/2)-indx(1) indx(1)];
+        [~,mini]=min(abs(indx));
+        indx=indx(mini);
+        lag(chani)=indx;
+    end
+end
+if size(data,1)==1
+    display('cleaning')
+    wu=whereUp+lag;
+    wu=wu(wu>0);
+    wu=wu(wu<size(data,2));
+    [cleanData,~,nS,Artifact]=cleanLineFinternal(data, wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+    noiseSamp{1,1}=nS;
+    if reverse
+        temp=cleanLineFinternal(fliplr(data), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+        temp=fliplr(temp);
+        rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+        rev2=size(data,2)-rev1+1;
+        cleanData(1,1:rev1)=temp(1:rev1);
+        cleanData(1,rev1+1:rev2-1)=(cleanData(1,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+    end
+    clear data
+else
+    Artifact='only applies for one channel analysis';
+    
+    
+    cleanData=data(good,:);
+    nSamp=cell(size(cleanData,1),1);
+    tic
+    [cleanData(1,:),~,nSamp{chani,1}]=cleanLineFinternal(data(good(1),:), whereUp, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+    time1st=toc;
+    if reverse
+        temp=cleanLineFinternal(fliplr(data(good(1),:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+        temp=fliplr(temp);
+        rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+        rev2=size(data,2)-rev1+1;
+        cleanData(1,1:rev1)=temp(1:rev1);
+        cleanData(1,rev1+1:rev2-1)=(cleanData(1,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+        time1st=time1st*2;
+    end
+    
+    if par
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/jobs));
+        display(['cleaning ',num2str(length(good)),' channels in parallel, wait about ',timeEstimate,'min'])
+    else
+        timeEstimate=num2str(ceil(time1st*(length(good)-1)/60/1));
+        display(['cleaning ',num2str(length(good)),' channels one by one, wait about ',timeEstimate,'min. channel '])
+    end
+    % do the cleaning
+    
+    if par
+        parfor chani=2:length(good)
+            wu=whereUp+lag(chani);
+            wu=wu(wu>0);
+            wu=wu(wu<size(data,2));
+            [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+            if reverse
+                fowAndRev=cleanData(chani,:);
+                temp=cleanLineFinternal(fliplr(data(chani,:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+                temp=fliplr(temp);
+                rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+                rev2=size(data,2)-rev1+1;
+                fowAndRev(1:rev1)=temp(1:rev1);
+                fowAndRev(rev1+1:rev2-1)=(fowAndRev(rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+                cleanData(chani,:)=fowAndRev;
+            end
+        end
+    else
+        for chani=2:length(good)
+            wu=whereUp+lag(chani);
+            wu=wu(wu>0);
+            wu=wu(wu<size(data,2));
+            [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+            if reverse
+                temp=cleanLineFinternal(fliplr(data(chani,:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+                temp=fliplr(temp);
+                rev1=Ncycles*cycLength; % good samples only from reverse cleaning
+                rev2=size(data,2)-rev1+1;
+                cleanData(chani,1:rev1)=temp(1:rev1);
+                cleanData(chani,rev1+1:rev2-1)=(cleanData(chani,rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
+            end
+            progNum(chani);
+        end
+    end
+    data(good,:)=cleanData;
+    clear cleanData
+    cleanData=data;% sorry about this mess, the parfor made me do this
+    clear data
+    noiseSamp=cell(size(cleanData,1),1);
+    for chani=1:length(good)
+        noiseSamp{good(chani),1}=nSamp{chani,1};
+    end
+    time2nd=toc;
+    mins=time2nd/60;
+    if floor(mins)>str2num(timeEstimate)
+        well='well, ';
+    else
+        well='';
+    end
+    secs=60*(mins-floor(mins));
+    txt=['\n',well,'it took ',num2str(floor(mins)),'min and ',num2str(round(secs)),'sec\n'];
+    fprintf(txt);
+end
+%% plotting results
+disp('plotting')
+[Four,F]=fftBasic(cleanData(good,1:fftLength),round(sRate));
+% [~, BLfreq1i] = min(abs(F-125)); % index for 125Hz
+% [~, BLfreq2i] = min(abs(F-145));
+%scale=mean(abs(Four(:,BLfreq1i:BLfreq2i)),2);
+for chani=1:size(Four,1)
+    Four(chani,:)=abs(Four(chani,:))/scale(chani);
+end
+meanPSDclean=mean(Four,1);
+figure;
+plot(F,meanPSD,'r');
+hold on
+plot(F,meanPSDclean,'g')
+legend('original','clean')
+title('PSD after rescaling and averaging channels')
+if par
+    if closeLabs
+        try
+            matlabpool close
+        end
+    end
+end
+display('done cleaning LF')
+%% Functions
+function [Lfreq,meanPSD]=findLfreq(fourier,freq)
+% finds if there is more 50 or 60Hz in the data.
+[~, BLfreq1i] = min(abs(freq-125)); % index for 125Hz
+[~, BLfreq2i] = min(abs(freq-145));
+scale=mean(abs(fourier(:,BLfreq1i:BLfreq2i)),2);
+for chani=1:size(fourier,1)
+    fourier(chani,:)=abs(fourier(chani,:))/scale(chani);
+end
+meanPSD=mean(fourier,1); % power spectrum, averaged over channels
+[~, i50] = min(abs(freq-50));
+[~, i60] = min(abs(freq-60));
+
+snr50=2*meanPSD(i50)/(meanPSD(i50-2)+meanPSD(i50+2));
+snr60=2*meanPSD(i60)/(meanPSD(i60-2)+meanPSD(i60+2));
+if meanPSD(i50)>meanPSD(i60) && snr50>2
+    Lfreq=50;
+elseif meanPSD(i60)>meanPSD(i50) && snr60>2
+    Lfreq=60;
+else
+    plot(freq,meanPSD)
+    title('Power Spectrum averaged over channels')
+    error('cannot makeup my mind if thhere is 50 or 60 Hz artifact. you can state it in cfg.Lfreq=50;')
+end
+
+function maxChani=findchanLF(fourier,freq,Lfreq)
+% finds which channel has most power-line artifact
+[~, BLfreq1i] = min(abs(freq-125)); % index for 125Hz
+[~, BLfreq2i] = min(abs(freq-145));
+[~, iLF] = min(abs(freq-Lfreq));
+scale=mean(abs(fourier(:,BLfreq1i:BLfreq2i)),2);
+[~,maxChani]=max(abs(fourier(:,iLF))./scale); %round(freq)==Lfreq
+
+function [cleaned, mean1,noiseSamp,Artifact] = cleanLineFinternal(dataA, whereUp, epochs, method, mean0,startNum,noiseType,noiseThr,sRate,cycLength)
+%% internal version of cleanLineF.m
+%  clean the line frequency based on points at which the Mains flipped from
+%  negative to positive
+%    [cleaned, mean1] = cleanLineF(dataA, whereUp, epochs, method, Mean0);
+% dataA   - array with one channel of MEGdata
+% whereUp - list of column indices where Line Freq changed from negative to
+%           positive.  If the mark of this change comes from ExtTrig #1 it
+%           may be found by:
+%                           whereUp=find(diff(mod(trig5to45,511)>=256)==1);
+% epochs  - list of indices where the last piece ended [default [0,length(dataA)]
+% method  - one of 3 possibilities:
+%            'GLOBAL' - the average over the entire data is used [default]
+%          'ADAPTIVE' - The averge gradually follow the mean, starting with
+%                       the average over 5 sec.
+%          'PHASEPRECESSION' - The data is interpolated 10 folds and the phase
+%                       precession at each trig is considered
+%          'FITSIZE' similar to globall but tries to adjust 50Hz amplitude cycle by cycle (moving rats)
+% Mean0   - start from that mean.  If not available comput from 1-st 256
+%          cycles.
+% startNum- how many cycles to take for adaptive template
+%
+% cleaned - same dimension like dataA but cleaned from the line frequency
+%           artefact.
+% mean1   - the last mean used
+%
+% noiseThr- how many std(mean(abs(data of one cycle))) to consider as
+%           noise. default is 5 SD.
+% sRate - needed for filter in FITSIZE method
+
+% initialize
+if size(dataA,1)>1
+    error('one channel only')
+end
+if nargin>3
+    okArgs = {'GLOBAL','ADAPTIVE','PHASEPRECESSION','FITSIZE','ADAPTIVE1'};
+    k = find(strcmpi(method, okArgs));
+    if isempty(k)
+        error('MATLAB:MEGanalysis:BadParameter',...
+            'Unknown method name:  %s.',method);
+    elseif length(k)>1
+        error('MATLAB:MEGanalysis:BadParameter',...
+            'Ambiguous method name:  %s.',method);
+    else
+        Global=false;
+        Adaptive = false;
+        phasePrecession = false;
+        fitSize=false;
+        Adaptive1 = false;
+        switch(k)
+            case 1  % GLOBAL
+                Global=true;
+            case 2 % ADAPTIVE
+                Adaptive = true;
+                if ~exist('startNum','var')
+                    startNum=[];
+                end
+                if isempty(startNum)
+                    startNum=4000;
+                end
+            case 3 % PhasePrecession
+                phasePrecession = true;
+            case 4
+                fitSize=true;
+            case 5
+                Adaptive1=true;
+                if ~exist('startNum','var')
+                    startNum=[];
+                end
+                if isempty(startNum)
+                    startNum=4000;
+                end
+        end
+    end
+else
+    Global=true; % the default
+    Adaptive = false;
+    phasePrecession = false;
+end
+if ~exist('mean0', 'var'), mean0=[]; end
+if ~isempty(mean0)
+    maxL = length(mean0)-1;
+else
+    maxL = max(diff(whereUp));
+end
+if ~exist('epochs', 'var'), epochs = []; end
+if isempty(epochs), epochs = [0, length(dataA)]; end
+if length(epochs)>2
+    epoched = true;
+    epochS = epochs(1:end-1)+1;
+    epochE = [(epochS(2:end)-1) length(dataA)];
+else
+    epoched = false;
+    epochS = epochs(1)+1;
+    epochE = epochs(2)-1;
+    if length(whereUp)<500 && ~Global
+        warning('MATLAB:MEGanalysis:ImproperCombination',...
+            'Data is too short so only GLOBAL is allowed')
+        Global=true; % the default
+        Adaptive = false;
+        phasePrecession = false;
+    end
+end
+if epoched && ~Global
+    warning('MATLAB:MEGanalysis:ImproperCombination',...
+        'Data is epoched and only GLOBAL is allowed')
+    Global=true; % the default
+    Adaptive = false;
+    phasePrecession = false;
+end
+% adjust if first epoch does not start at 1
+if epochS(1)>1
+    epochS=[1 epochS];
+    epochE = [epochS(2)-1 epochE];
+end
+if ~exist('noiseThr','var')
+    noiseThr=[];
+end
+if isempty(noiseThr)
+    noiseThr=5;
+end
+if ~exist('fitSize','var')
+    fitSize=[];
+end
+if isempty(fitSize)
+    fitSize=false;
+end
+
+% Clean
+Artifact=zeros(size(dataA));
+if Global
+    if ~epoched
+        meanL=round(mean(diff(whereUp)));
+    else % consider only whereUp with complete cycles at each epoch
+        error('no support for epoched, use createCleanFile');
+    end
+    % lastCycleStart  = whereUp(end);
+    cleaned = zeros(size(dataA));
+    
+    % get the mean signal per line cycle
+    [meanLine,noiseSamp] = oneLineCycleInternal(dataA,whereUp,noiseType,noiseThr,cycLength);
+    % subtract from signal one cycle at a time
+    for ii=1:length(whereUp)-1
+        iStrt = whereUp(ii);
+        iEnds = whereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=meanLine(:,1:numInThisCycle);
+        Artifact(iStrt:iEnds)=artifact;
+        cleaned(:,iStrt:iEnds) = dataA(:,iStrt:iEnds)-artifact;
+    end
+    % subtract the leftover tail
+    lastHere=iEnds;
+    if lastHere<length(dataA)  % clean the last piece
+        lastTail = size(cleaned,2)-lastHere;
+        if lastHere-iEnds+lastTail<=meanL % less then one cycle left
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end)-...
+                meanLine(:,lastHere-iEnds+1:lastHere-iEnds+lastTail);
+        else % treat later
+            warning('MATLAB:MEGanalysis:incompleteCalculations', ['Last ' num2str(lastTail) ' Not cleaned!']);
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end);
+        end
+    end
+    mean1 = meanLine;
+elseif fitSize
+    hpObj=fdesign.highpass('Fst,Fp,Ast,Ap',1,40,60,1,sRate);%
+    Filt=design(hpObj ,'butter');
+    dataAhp = myFilt(dataA,Filt);
+    meanL=round(mean(diff(whereUp)));
+    firstCycleStart = whereUp(1);
+    first=1;
+    last = length(whereUp)-1;
+    cleaned = zeros(size(dataA));
+    % get the mean signal per line cycle
+    [meanLine,noiseSamp] = oneLineCycleInternal(dataA,whereUp,noiseType,noiseThr,cycLength);
+    meanLine=meanLine-meanLine(1);
+    % find zero crossing in template
+    t1=meanLine(1:end-1);
+    t2=meanLine(2:end);
+    tt=t1.*t2;
+    dt        = t2-t1;
+    indx_up   = find( (tt<0) & (dt>0) ) ;
+    indx_down = find( (tt<0) & (dt<0) ) ;
+    if length(indx_up)==2
+        indx_up=indx_up(2);
+    end
+    if length(indx_down)==2
+        indx_down=indx_down(2);
+    end
+    indx1=min([indx_up indx_down]);
+    indx2=max([indx_up indx_down]);
+    numInThisCycle = firstCycleStart-1;
+    if meanL==numInThisCycle
+        strtOffset=1;
+    else
+        strtOffset=0;
+    end
+    if epochE-whereUp(last)>meanL  %  add one cycle
+        thisWhereUp = whereUp(first-strtOffset:(last+1));
+    else
+        thisWhereUp = whereUp(first-strtOffset:last);
+    end
+    if meanL>numInThisCycle
+        cleaned(:,epochS:firstCycleStart-1) = dataA(:,epochS:firstCycleStart-1)...
+            - meanLine(:,(meanL-numInThisCycle):meanL-1);
+        iEnds = thisWhereUp;
+    end
+    for ii=1:length(thisWhereUp)-1
+        iStrt = thisWhereUp(ii);
+        iEnds = thisWhereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=zeros(1,numInThisCycle);
+        artifact(1:min(indx2,numInThisCycle))=meanLine(:,1:min(indx2,numInThisCycle));
+        if length(iStrt:iEnds)<=length(meanLine)
+            mLtrimmed=meanLine(1:indx2);
+            mLtrimmed=mLtrimmed-(mLtrimmed(1)+mLtrimmed(end))/2;
+            rs=resample(mLtrimmed,length(iStrt:iEnds),length(mLtrimmed));
+            artifact=rs;
+            if ~sum(ismember(iStrt:iEnds,noiseSamp))
+                indx_down_rs=round(indx1*length(iStrt:iEnds)/length(mLtrimmed));
+                indx_up_rs=round(indx2*length(iStrt:iEnds)/length(mLtrimmed));
+                x=rs(1,1:indx_down_rs);
+                y=dataAhp(:,iStrt:iStrt+indx_down_rs-1);
+                pU=polyfit(x,y,1);
+                x=rs(1,indx_down_rs+1:indx_up_rs);
+                y=dataAhp(:,iStrt+indx_down_rs+1:iStrt+indx_up_rs);
+                pD=polyfit(x,y,1);
+                if pU(1)>0.5 && pU(1)<1.5
+                    artifact(1:indx_down_rs)=pU(1)*rs(1,1:indx_down_rs);%+pHP(2);1,1:indx_down);
+                end
+                if pD(1)>0.5 && pD(1)<1.5
+                    artifact(indx_down_rs+1:min([indx_up_rs,numInThisCycle]))=pD(1)*rs(1,indx_down_rs+1:min([indx_up_rs,numInThisCycle]));%+pHP(2);
+                end
+            end
+        end
+        Artifact(iStrt:iEnds)=artifact;
+        cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
+    end
+    % subtract the leftover tail
+    if epochE>iEnds  ; %clean the tail
+        lastHere = epochE;
+        cleaned(:,iEnds+1:lastHere) =...
+            dataA(:,iEnds+1:lastHere)-...
+            meanLine(:,1:lastHere-iEnds);
+    end
+    if lastHere<length(dataA)  % clean the last piece
+        lastTail = size(cleaned,2)-lastHere;
+        if lastHere-iEnds+lastTail<=meanL % less then one cycle left
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end)-...
+                meanLine(:,lastHere-iEnds+1:lastHere-iEnds+lastTail);
+        else % treat later
+            warning('MATLAB:MEGanalysis:incompleteCalculations', ['Last ' num2str(lastTail) ' Not cleaned!']);
+            cleaned(:,lastHere+1:end) = dataA(:,lastHere+1:end);
+        end
+    end
+    mean1 = meanLine;
+elseif Adaptive
+    %% generate a slowly changing average
+    cleaned = dataA;
+    %    startNum=256;
+    numCycles = length(whereUp);
+    Q = 1-1/startNum;
+    sum1 = zeros(1,maxL+1);
+    ml1 = nan(numCycles,maxL +1);
+    if ~exist('mean0', 'var')
+        mean0 = [];
+    else
+        if sum(abs(mean0))==0, mean0=[]; end
+    end
+    % Estimate noise
+    if strcmp(noiseType,'cyc')
+        for cycle = 1:(numCycles-2)
+            startCycle = whereUp(cycle);
+            amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); %#ok<AGROW>
+        end
+        amp2=(amp1-mean(amp1))./std(amp1);
+        noise=min(amp1(amp2>=noiseThr));
+        if isempty(noise)
+            noise=max(amp1); % to accept all segments
+        end
+    elseif strcmp(noiseType,'samp')
+        noise=std(dataA)*noiseThr;
+    end
+    % compute a simple average
+    noiseSamp=[];
+    if isempty(mean0)  % compute for the first 256 (or startNum)
+        cycCount=0;
+        for cycle = 1:startNum
+            startCycle = whereUp(cycle);
+            if strcmp(noiseType,'cyc') && mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))<=noise
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycCount=cycCount+1;
+            elseif strcmp(noiseType,'samp') && sum(abs((dataA(startCycle:startCycle+maxL)))>=noise)==0
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycCount=cycCount+1;
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; %#ok<*AGROW>
+            end
+        end
+        ml1(1:startNum,:) = repmat(sum1/cycCount,startNum,1);
+    else % mean0 was provided
+        % check that OK
+        r = size(mean0,1);
+        if r==1 % a row vector - transpose
+            mean0 = mean0';
+            r = size(mean0,1);
+        end
+        if r~= length(sum1)
+            error('MATLAB:MEGanalysis:ImproperParam',...
+                'The initial mean must be %d long', length(sum1))
+        end
+        ml1(1:startNum,:) = repmat(mean0',startNum,1);
+    end  % end of getting the first startNum averages
+    % continue in adaptive way
+    for cycle = startNum+1:numCycles
+        startCycle = whereUp(cycle);
+        if startCycle+maxL <= size(dataA,2)
+            if strcmp(noiseType,'cyc') && mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))) <= noise
+                ml1(cycle,:) = Q*ml1(cycle-1,:) + dataA(startCycle:startCycle+maxL)/startNum;
+            elseif strcmp(noiseType,'samp') && sum(abs((dataA(startCycle:startCycle+maxL)))>=noise)==0
+                ml1(cycle,:) = Q*ml1(cycle-1,:) + dataA(startCycle:startCycle+maxL)/startNum;
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)];
+                ml1(cycle,:)=ml1(cycle-1,:);
+            end
+        else % extra cycles copy the previous one
+            ml1(cycle,:)=ml1(cycle-1,:);  % copy the last one
+        end
+    end
+    % BL correction for template
+    for tempi=1:size(ml1,1)
+        ml1(tempi,:)=ml1(tempi,:)-mean(ml1(tempi,1:cycLength));
+    end
+    for ii=1:length(whereUp)-1
+        iStrt = whereUp(ii);
+        iEnds = whereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=ml1(ii,1:numInThisCycle);
+        cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
+        Artifact(iStrt:iEnds)=artifact;
+    end
+    % treat the edges
+    if whereUp(1)>1  %header before first whereUp
+        numInHeader = whereUp(1)-1;
+        artifact=ml1(1,end-numInHeader+1:end);
+        cleaned(1:numInHeader) = dataA(1:numInHeader)-artifact;
+        Artifact(1:numInHeader)=artifact;
+    end
+    if whereUp(end)<length(dataA) % tail after whereUp
+        numInTail = length(dataA)-whereUp(end);
+        artifact=ml1(end, end-numInTail:end);
+        cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
+        Artifact(end-numInTail:end)=artifact;
+    end
+    mean1 = ml1(end,:);
+elseif phasePrecession
+    interpNo =10; % How many interpolation points between samples
+    [cleaned, mean1,Artifact] = cleanWphaseInternal(dataA,whereUp,interpNo);
+    noiseSamp='not available for phasePrecession';
+elseif Adaptive1
+    %% similar to adaptive but makes an average of last 2000 and next 2000 (Ncycles/2) cycles. not as good for an unknown reason.
+    cleaned = dataA;
+    numCycles = length(whereUp);
+    sum1 = zeros(1,maxL+1);
+    ml1 = nan(numCycles,maxL +1);
+    if ~exist('mean0', 'var')
+        mean0 = [];
+    else
+        if sum(abs(mean0))==0, mean0=[]; end
+    end
+    % Estimate Noise
+    if strcmp(noiseType,'cyc')
+        for cycle = 1:(numCycles-2)
+            startCycle = whereUp(cycle);
+            amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); %#ok<AGROW>
+        end
+        amp2=(amp1-mean(amp1))./std(amp1);
+        noise=min(amp1(amp2>=noiseThr));
+        if isempty(noise)
+            noise=max(amp1); % to accept all segments
+        end
+    elseif strcmp(noiseType,'samp')
+        noise=std(dataA)*noiseThr;
+    end
+    %% compute a simple average
+    noiseSamp=[];
+    if isempty(mean0)  % compute for the first 256 (or startNum)
+        cycCount=0;
+        cycle=0;
+        while cycCount < startNum
+            cycle=cycle+1;
+            startCycle = whereUp(cycle);
+            if strcmp(noiseType,'cyc') && mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))<=noise
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycle=cyc+1;
+            elseif strcmp(noiseType,'samp') && sum(abs((dataA(startCycle:startCycle+maxL)))>=noise)==0
+                sum1 = sum1 + dataA(startCycle:startCycle+maxL);
+                cycCount=cycCount+1;
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; %#ok<*AGROW>
+            end
+        end
+        currentCycle=cycle-floor(startNum/2);
+        ml1(1:currentCycle,:) = repmat(sum1/cycCount,currentCycle,1);
+    else % mean0 was provided
+        error('no mean0 allowed')
+    end  % end of getting the first startNum averages
+    % continue in adaptive way
+    for cycle = cycle+1:numCycles
+        startCycle = whereUp(cycle);
+        if startCycle+maxL <= size(dataA,2)
+            if strcmp(noiseType,'cyc') && mean(abs(dataA(startCycle:startCycle+maxL)...
+                    -mean(dataA(startCycle:startCycle+maxL)))) <= noise
+                %ml1(cycle,:) = Q*ml1(cycle-1,:) + ...
+                %    dataA(startCycle:startCycle+maxL)/startNum;
+                sum1=sum1-ml1(cycle-startNum,:)+dataA(startCycle:startCycle+maxL);
+                ml1(currentCycle,:)=sum1./startNum;
+                %prev=dataA(startCycle:startCycle+maxL);
+            elseif strcmp(noiseType,'samp') && sum(abs((dataA(startCycle:startCycle+maxL)))>=noise)==0
+                sum1=sum1-ml1(cycle-startNum,:)+dataA(startCycle:startCycle+maxL);
+                ml1(currentCycle,:)=sum1./startNum;
+                %prev=dataA(startCycle:startCycle+maxL);
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)];
+                ml1(currentCycle,:)=ml1(currentCycle-1,:);
+            end
+        else % extra cycles copy the previous one
+            ml1(currentCycle,:)=ml1(currentCycle-1,:);  % copy the last one
+        end
+        currentCycle=currentCycle+1;
+    end
+    ml1(currentCycle:numCycles,:) = repmat(ml1(currentCycle-1,:),numCycles-currentCycle+1,1);
+    % BL correction for template
+    for tempi=1:size(ml1,1)
+        ml1(tempi,:)=ml1(tempi,:)-mean(ml1(tempi,1:cycLength));
+    end
+    for ii=1:length(whereUp)-1
+        iStrt = whereUp(ii);
+        iEnds = whereUp(ii+1) -1;
+        numInThisCycle = iEnds-iStrt+1;
+        artifact=ml1(ii,1:numInThisCycle);
+        cleaned(iStrt:iEnds) = dataA(iStrt:iEnds)-artifact;
+        Artifact(iStrt:iEnds)=artifact;
+    end
+    % treat the edges
+    if whereUp(1)>1  %header before first whereUp
+        numInHeader = whereUp(1)-1;
+        artifact=ml1(1,end-numInHeader+1:end);
+        cleaned(1:numInHeader) = dataA(1:numInHeader)-artifact;
+        Artifact(1:numInHeader)=artifact;
+    end
+    if whereUp(end)<length(dataA) % tail after whereUp
+        numInTail = length(dataA)-whereUp(end);
+        artifact=ml1(end, end-numInTail:end);
+        cleaned(end-numInTail:end) = dataA(end-numInTail:end)-artifact;
+        Artifact(end-numInTail:end)=artifact;
+    end
+    mean1 = ml1(end,:);
+else
+    error('MATLAB:MEGanalysis:unknownParam','method was not defined')
+end
+
+function [meanLine,noiseSamp,cycCount] = oneLineCycleInternal(dataA, whereUp,noiseType,noiseThr,cycLength)
+%% internal version of oneLineCycle
+%
+% average all cycles of 50Hz
+%
+% dataA    - nChannelsXmSamples
+% whereUp  - list of indices where the 50Hz goes up
+% noiseType- 'cyc' or 'samp', better use samp but only when no low freq artifact is present
+% noiseThr - noise Threshold in z scores, needed also for cyc
+
+% meanLine - the mean triggered on the 50hz up stroke
+% noiseSamp- are samples which are members of noisy cycles
+% cycCount - the number of good cycles
+
+
+% Sep-2008  MA
+% May-2014  YH added noise rejection
+% initialize
+if ~exist('noiseThr','var')
+    noiseThr=[];
+end
+if isempty(noiseThr)
+    noiseThr=5;
+end
+
+maxL=round(1.25*cycLength);
+[nChannels,~] = size(dataA);
+numCycles = length(whereUp)-2;
+sum1 = zeros(nChannels,maxL+1);
+% Estimate noise
+if strcmp(noiseType,'cyc')
+    for cycle = 1:(numCycles-2)
+        startCycle = whereUp(cycle);
+        amp1(cycle) = mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL)))); %#ok<AGROW>
+    end
+    amp2=(amp1-mean(amp1))./std(amp1);
+    noise=min(amp1(amp2>=noiseThr));
+    if isempty(noise)
+        noise=max(amp1); % to accept all segments
+    end
+elseif strcmp(noiseType,'samp')
+    noise=std(dataA)*noiseThr;
+end
+% average
+cycCount=0;
+noiseSamp=[];
+if strcmp(noiseType,'cyc')
+    for cycle = 1:numCycles
+        startCycle = whereUp(cycle);
+        if startCycle+maxL <= size(dataA,2)
+            if mean(abs(dataA(startCycle:startCycle+maxL)-mean(dataA(startCycle:startCycle+maxL))))<=noise
+                cycCount=cycCount+1;
+                sum1 = sum1 + dataA(:,startCycle:startCycle+maxL);
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; %#ok<*AGROW>
+            end
+        end
+    end
+elseif strcmp(noiseType,'samp')
+    for cycle = 1:numCycles
+        startCycle = whereUp(cycle);
+        if startCycle+maxL <= size(dataA,2)
+            if sum(abs((dataA(startCycle:startCycle+maxL)))>=noise)==0
+                cycCount=cycCount+1;
+                sum1 = sum1 + dataA(1,startCycle:startCycle+maxL);
+            else
+                noiseSamp=[noiseSamp,startCycle:(startCycle+maxL)]; %#ok<*AGROW>
+            end
+        end
+    end
+end
+meanLine = sum1/cycCount;
+function  [xClean, mean1,Artifact] = cleanWphaseInternal(x,whereUp,interpNo)
+%% clean periodic signal from x, allow phase precession
+
+
+% Oct-2010  MA
+
+% initialize
+if ~exist('interpNo','var'), interpNo=[]; end
+if isempty(interpNo), interpNo = 10; end
+
+xInt = interp(x,interpNo);
+whereUpInt = interpNo*(whereUp-1) +1;
+
+
+% find the mean
+[phasePerSample, phaseAtTrig] = findPhasePrecession(whereUpInt);
+[mean3cycles, zeroAt] = findMeanCycle(xInt, whereUpInt, 1);
+
+% clean 1 cycle at a time
+Artifact=zeros(size(x));
+for iTrig = 1:length(whereUp)-1
+    xI0 = whereUpInt(iTrig);
+    xI1 = whereUpInt(iTrig+1)-1;
+    phase0 = phaseAtTrig(iTrig);
+    % phase1 = phaseAtTrig(iTrig+1);
+    % find the closest index
+    i0 = round(phase0/phasePerSample)+zeroAt;
+    i1 = i0 +(xI1-xI0);
+    %i1 = round((phase1-zeroAt)/phasePerSample);
+    xInt(xI0:xI1) = xInt(xI0:xI1)-mean3cycles(i0:i1);
+    Artifact(xI0:xI1)=mean3cycles(i0:i1);
+end
+
+
+% treat the edges
+% the beginning
+if whereUpInt(1)>1
+    xI0 = 1;
+    xI1 = whereUpInt(1)-1;
+    phase0 = phaseAtTrig(1)- xI1*phasePerSample;
+    % phase1 = phaseAtTrig(1);
+    i0 = round(phase0/phasePerSample) +zeroAt;
+    i1 = i0 +(xI1-xI0);
+    xInt(xI0:xI1) = xInt(xI0:xI1)-mean3cycles(i0:i1);
+    Artifact(xI0:xI1)=mean3cycles(i0:i1);
+end
+% the end
+
+if whereUpInt(end)<length(xInt)
+    xI1 = length(xInt);
+    xI0 = whereUpInt(end)+1;
+    % phase1 = xI1*phasePerSample -phaseAtTrig(end);
+    phase0 = phaseAtTrig(end);
+    i0 = round(phase0/phasePerSample) +zeroAt;
+    i1 = i0 +(xI1-xI0);
+    xInt(xI0:xI1) = xInt(xI0:xI1)-mean3cycles(i0:i1);
+    Artifact(xI0:xI1)=mean3cycles(i0:i1);
+end
+
+% wrap up
+xClean = xInt(1:10:end);
+mean1 = mean3cycles;
+
+function variable=default(field,value,cfg)
+%% set default parameters
+if isfield(cfg,field)
+    eval(['variable=cfg.',field,';'])
+else
+    variable=value;
+end
+
+##### SOURCE END #####
+--></body></html>
