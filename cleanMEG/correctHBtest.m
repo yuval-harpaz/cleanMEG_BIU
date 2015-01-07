@@ -1,4 +1,4 @@
-function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
+function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHBtest(data,sRate,figOptions,ECG,cfg)
 % [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 % HB components   
 %     /\      _____         /\      _____     
@@ -135,7 +135,7 @@ matchMethod=default('matchMethod','xcorr',cfg);
 beforeHBs=default('beforeHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.3*period
 afterHBs=default('afterHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.7*period
 ampLinThr=default('ampLinThr',0.25,cfg);  % threshold for low amplitude HB, use average amplitude when below this ratio   
-meanMEGhpFilt= default('meanMEGhpFilt',3,cfg); % highpass filter for meanMEG before everything
+meanMEGhpFilt= default('meanMEGhpFilt',[],cfg); % highpass filter for meanMEG before everything
 
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
@@ -314,42 +314,42 @@ else
          end
     end
 end
-if isempty(ECG)
-    meanMEG=double(mean(data));
-    if ~isempty(meanMEGhpFilt)
-        meanMEG=myFilt(meanMEG,mmhpFilt);
-    end
-    meanMEGf = myFilt(meanMEG,BandPassFilt);
-    meanMEGf=meanMEGf-median(meanMEGf);
-end
+% if isempty(ECG)
+%     meanMEG=double(mean(data));
+%     if ~isempty(meanMEGhpFilt)
+%         meanMEG=myFilt(meanMEG,mmhpFilt);
+%     end
+%     meanMEGf = myFilt(meanMEG,BandPassFilt);
+%     meanMEGf=meanMEGf-median(meanMEGf);
+% end
 %% peak detection on MCG (or ECG) signal
 disp('looking for HB peaks')
 [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*minPeriod)); % 450ms interval minimum
 % test if, by chance, the HB field is mainly negative
 posHB=true;
-if isempty(ECG)
-        [peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,peakZthr,round(sRate*minPeriod));
-    if median(peaksNeg)/median(peaks)>1.1
-        diary('HBlog.txt')
-        warning('NEGATIVE HB FIELD? if not, average selected MEG channels and give it as ECG');
-        diary off
-        period1=median(diff(IpeaksNeg))./sRate;
-        if period1<2
-            [peaks, Ipeaks]=findPeaks(-meanMEGf,peakZthr,round(sRate*period1*0.6));
-            peaks=-peaks;
-        else
-            Ipeaks=IpeaksNeg;
-            peaks=-peaksNeg;
-        end
-        posHB=false;
-        %meanMEGf=-meanMEGf;
-    else
-        period1=median(diff(Ipeaks))./sRate;
-        if period1<2 %#ok<*BDSCI> %try to improve peak detection if peak intervals are reasonable
-            [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*period1*0.6)); % 450ms interval
-        end
-    end
-end
+% if isempty(ECG)
+%         [peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,peakZthr,round(sRate*minPeriod));
+%     if median(peaksNeg)/median(peaks)>1.1
+%         diary('HBlog.txt')
+%         warning('NEGATIVE HB FIELD? if not, average selected MEG channels and give it as ECG');
+%         diary off
+%         period1=median(diff(IpeaksNeg))./sRate;
+%         if period1<2
+%             [peaks, Ipeaks]=findPeaks(-meanMEGf,peakZthr,round(sRate*period1*0.6));
+%             peaks=-peaks;
+%         else
+%             Ipeaks=IpeaksNeg;
+%             peaks=-peaksNeg;
+%         end
+%         posHB=false;
+%         %meanMEGf=-meanMEGf;
+%     else
+%         period1=median(diff(Ipeaks))./sRate;
+%         if period1<2 %#ok<*BDSCI> %try to improve peak detection if peak intervals are reasonable
+%             [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*period1*0.6)); % 450ms interval
+%         end
+%     end
+% end
 if figs
     figure;
     plot(time,meanMEGf)
