@@ -148,19 +148,30 @@ if isempty(data) || exist('var4DfileName','var');
     var4Dchi = channel_index(var4Dp, 'meg', 'name');
     display(['reading ',var4DfileName]);
     data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);%,var4Dchi);
+    cnf = get(var4Dp, 'config');
     if isempty(chanLF)
-        var4Dlabels={'MCxaA','MCyaA','MCzaA','MLxaA','MLyaA','MLzaA','MRxaA','MRyaA','MRzaA'};
-        var4DchiRef = channel_index(var4Dp,var4Dlabels, 'name');
-        var4Dref = read_data_block(var4Dp,[1 var4DnSamp],var4DchiRef);%,var4Dchi);
-        
-        [FourRef,Fref]=fftBasic(var4Dref,round(sRate));
-        if isempty(Lfreq)
-            Lfreq=findLfreq(FourRef,Fref);
+        if strcmp(cnf.config_data.site_name,'Bar Ilan')
+            barilan=true;
+            Lfreq=50;
+            biuFileName=var4DfileName;
+            var4Dlabels={'TRIGGER'};
+            maxChani=1;
+            var4DchiTrig = channel_index(var4Dp,var4Dlabels, 'name');
+            chanLF= bitand(uint16(read_data_block(var4Dp,[1 var4DnSamp],var4DchiTrig)),256);
+        else
+            var4Dlabels={'MCxaA','MCyaA','MCzaA','MLxaA','MLyaA','MLzaA','MRxaA','MRyaA','MRzaA'};
+            var4DchiRef = channel_index(var4Dp,var4Dlabels, 'name');
+            var4Dref = read_data_block(var4Dp,[1 var4DnSamp],var4DchiRef);
+            
+            [FourRef,Fref]=fftBasic(var4Dref,round(sRate));
+            if isempty(Lfreq)
+                Lfreq=findLfreq(FourRef,Fref);
+            end
+            if isempty(chanLF)
+                maxChani=findchanLF(FourRef,Fref,Lfreq);
+            end
+            chanLF=var4Dref(maxChani,:);
         end
-        if isempty(chanLF)
-            maxChani=findchanLF(FourRef,Fref,Lfreq);
-        end
-        chanLF=var4Dref(maxChani,:);
         display(['selected ',var4Dlabels{maxChani},' as Line Freq cue'])
     end
     clear var4D*
@@ -552,6 +563,11 @@ if par
     end
 end
 display('done cleaning LF')
+if barilan
+   
+    display('saving lf_ file')
+    rewrite_pdf(cleanData,[],[],'lf')
+end
 %% Functions
 function [Lfreq,meanPSD]=findLfreq(fourier,freq)
 % finds if there is more 50 or 60Hz in the data.
@@ -574,7 +590,7 @@ elseif meanPSD(i60)>meanPSD(i50) && snr60>2
 else
     plot(freq,meanPSD)
     title('Power Spectrum averaged over channels')
-    error('cannot makeup my mind if thhere is 50 or 60 Hz artifact. you can state it in cfg.Lfreq=50;')
+    error('cannot makeup my mind if there is 50 or 60 Hz artifact. you can state it in cfg.Lfreq=50;')
 end
 
 function maxChani=findchanLF(fourier,freq,Lfreq)
