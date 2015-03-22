@@ -566,7 +566,7 @@ display('done cleaning LF')
 if barilan
    
     display('saving lf_ file')
-    rewrite_pdf(cleanData,[],[],'lf')
+    rewrite_pdf(cleanData,[],biuFileName,'lf')
 end
 %% Functions
 function [Lfreq,meanPSD]=findLfreq(fourier,freq)

@@ -51,6 +51,9 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %  other extreme cases, but he is now in Costa Rica
 %  - cfg.chanZthr (20) z-score for declaring bad channels. A channel is bad
 %  if it surpasses this value for 3 seconds in the beginning.
+%  - cfg.badChan ([]) is the index of bad channel. if you specify this badChan
+%  will not be self determined. cfg.chanZthr will be ignored. 4D users -
+%  for bad A204 use cfg.badChan=204;
 %  - cfg.jPad (1) how much to zero pad before and after jump
 %  - cfg.jZthr (15) is a z-score over which the meanMEG is considered to
 %  have a jump artifact
@@ -76,7 +79,7 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % peak (seconds)
 %  - cfg.repressTime (20ms) is how much of the template to repress to zero on
 %  the edges.
-%
+
 %% output
 %  - data is a matrix of cleaned data
 %  - HBtimes is the times when HB peaks were detected
@@ -136,7 +139,7 @@ beforeHBs=default('beforeHBs',[],cfg); % how long the right side of template HB 
 afterHBs=default('afterHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.7*period
 ampLinThr=default('ampLinThr',0.25,cfg);  % threshold for low amplitude HB, use average amplitude when below this ratio   
 meanMEGhpFilt= default('meanMEGhpFilt',3,cfg); % highpass filter for meanMEG before everything
-
+badChan= default('badChan',[],cfg);
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
 if ~exist('data','var')
@@ -167,11 +170,14 @@ if isempty(data) || exist('var4DfileName','var');
         try
             var4DfileName=ls('xc,lf_c,*');
         catch %#ok<CTCH>
-            var4DfileName=ls('c,*');
+            try
+                var4DfileName=ls('lf_c,*');
+            catch
+                var4DfileName=ls('c,*');
+            end
         end
         var4DfileName=['./',var4DfileName(1:end-1)];
     end
-    
     var4Dp=pdf4D(var4DfileName);
     sRate=double(get(var4Dp,'dr'));
     var4Dhdr = get(var4Dp, 'header');
@@ -187,6 +193,11 @@ if isempty(data) || exist('var4DfileName','var');
         end
         figOptions.label=var4Dlabel;
         figOptions.layout='4D248.lay';
+    end
+    cnf = get(var4Dp, 'config');
+    if strcmp(cnf.config_data.site_name,'Bar Ilan')
+        barilan=true;
+        biuFileName=var4DfileName;
     end
     clear var4D*
 end
@@ -265,6 +276,7 @@ meanMEGf=meanMEGf-median(meanMEGf);
 
 %% look for a noisy segment and noisy channels
 % find bad channels, has to be noisy for 3 of the first 3 seconds
+if isempty(badChan)
 stdMEG=std(data(:,1:round(sRate))');
 badc1=stdMEG>chanZthr*median(stdMEG);
 stdMEG=std(data(:,round(sRate):round(2*sRate))');
@@ -272,6 +284,9 @@ badc2=stdMEG>chanZthr*median(stdMEG);
 stdMEG=std(data(:,round(2*sRate):round(3*sRate))');
 badc3=stdMEG>chanZthr*median(stdMEG);
 badc=find((badc1+badc2+badc3)==3);
+else
+    badc=badChan;
+end
 if ~isempty(badc)
     data(badc,:)=0;
 end
@@ -732,6 +747,10 @@ if EK <3
     diary('HBlog.txt')
     fprintf(2,txt);
     diary off
+end
+if barilan
+    display('saving hb_ file')
+    rewrite_pdf(data,[],biuFileName,'hb')
 end
 
 %% internal functions
