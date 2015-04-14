@@ -109,7 +109,7 @@ if strcmpi(method,'FITSIZE')
 else
     lookForLag=false;
 end
-
+barilan=false;
 %% try to load data file and check if 4D-neuroimaging data
 if ~exist('data','var')
     data=[];
