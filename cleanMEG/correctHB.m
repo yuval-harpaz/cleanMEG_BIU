@@ -140,6 +140,7 @@ afterHBs=default('afterHBs',[],cfg); % how long the right side of template HB sh
 ampLinThr=default('ampLinThr',0.25,cfg);  % threshold for low amplitude HB, use average amplitude when below this ratio   
 meanMEGhpFilt= default('meanMEGhpFilt',3,cfg); % highpass filter for meanMEG before everything
 badChan= default('badChan',[],cfg);
+barilan=false; % is it Bar-Ilan University data, if so write file in the end
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
 if ~exist('data','var')
