@@ -109,7 +109,7 @@ if strcmpi(method,'FITSIZE')
 else
     lookForLag=false;
 end
-barilan=false;
+
 %% try to load data file and check if 4D-neuroimaging data
 if ~exist('data','var')
     data=[];
@@ -149,11 +149,16 @@ if isempty(data) || exist('var4DfileName','var');
     display(['reading ',var4DfileName]);
     data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);%,var4Dchi);
     cnf = get(var4Dp, 'config');
+    if strcmp(cnf.config_data.site_name,'Bar Ilan')
+        barilan=true;
+        biuFileName=var4DfileName;
+    else
+        barilan=false;
+    end
     if isempty(chanLF)
-        if strcmp(cnf.config_data.site_name,'Bar Ilan')
-            barilan=true;
+        if barilan
             Lfreq=50;
-            biuFileName=var4DfileName;
+            
             var4Dlabels={'TRIGGER'};
             maxChani=1;
             var4DchiTrig = channel_index(var4Dp,var4Dlabels, 'name');
@@ -564,7 +569,6 @@ if par
 end
 display('done cleaning LF')
 if barilan
-   
     display('saving lf_ file')
     rewrite_pdf(cleanData,[],biuFileName,'lf')
 end
