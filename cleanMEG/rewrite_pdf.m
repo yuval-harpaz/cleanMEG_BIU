@@ -25,6 +25,8 @@ if ~exist('newPref','var')
 end
 if isempty(newPref)
     newFile=['rw_',source];
+elseif ~isempty(strfind(source,'_'))
+    newFile=[newPref,',',source];
 else
     newFile=[newPref,'_',source];
 end

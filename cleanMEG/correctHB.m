@@ -750,7 +750,7 @@ if EK <3
     diary off
 end
 if barilan
-    display('saving hb_ file')
+    display('saving hb* file')
     rewrite_pdf(data,[],biuFileName,'hb')
 end
 
