@@ -1,6 +1,15 @@
 function [fourier,freq]=fftBasic(rows,Fs,keepSegments)
 % rows = data with rows for channels
 % Fs = Sampling frequency
+% you can give 4D filename too as first argument.
+if ischar(rows)
+    fileName=rows;
+    p=pdf4D(fileName);
+    chi = channel_index(p, 'meg', 'name');
+    display(['reading ',fileName]);
+    rows = read_data_block(p,[],chi);
+    Fs=get(p,'dr');
+end
 if ~exist('keepSegments','var')
     keepSegments=false;
 end

@@ -6,13 +6,13 @@ if ~exist('fileName','var')
         LS=ls('hb*');
         fileName=LS(1:end-1)
     end
-    if ~exist('LS','file')
+    if ~exist('LS','var')
         try
             LS=ls('lf*');
             fileName=LS(1:end-1)
         end
     end
-    if ~exist('LS','file')
+    if ~exist('LS','var')
         try
             LS=ls('c,rf*');
             fileName=LS(1:end-1)
