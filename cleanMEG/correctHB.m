@@ -1,9 +1,9 @@
 function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 % [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
-% HB components   
-%     /\      _____         /\      _____     
+% HB components
+%     /\      _____         /\      _____
 % __ /  \  __/     \______ /  \  __/     \__...
-%   /    \/               /    \/ 
+%   /    \/               /    \/
 %   Q  R  S     T
 %
 %% Input
@@ -25,7 +25,7 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %
 % cfg
 %
-% You can change variables by placing them in cfg. 
+% You can change variables by placing them in cfg.
 % Lots of thresholds can be set and filters factors.
 % a bit about the FILTERS.
 % PEAK detection is performed on meanMEGf (filtered mean MEG channel). A highpass is recommended to
@@ -69,13 +69,13 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % trace or the mean(MEG) channel.
 %  - cfg.ampFiltFreq (2) is a high-pass or band-pass filter used to test R
 % peak amplitude. Better use highpass only, although bp may improve linear
-% fit between (unfiltered) template and filtered data. 
+% fit between (unfiltered) template and filtered data.
 %  - cfg.ampLinThr (0.25) is linear regression r threshold. If there is no good
 %  fit between template QRS and an instance of a heart beat, amplitude will not
 %  be assesed by r, the average HB amp will be given.
-%  - cfg.afterHBs (0.7 of the period) is how long the template should continue after the 
+%  - cfg.afterHBs (0.7 of the period) is how long the template should continue after the
 % peak (seconds)
-%  - cfg.beforeHBs (0.3 of the period) is when the template should start before the 
+%  - cfg.beforeHBs (0.3 of the period) is when the template should start before the
 % peak (seconds)
 %  - cfg.repressTime (20ms) is how much of the template to repress to zero on
 %  the edges.
@@ -137,7 +137,7 @@ dataFiltFreq=default('dataFiltFreq',[],cfg);
 matchMethod=default('matchMethod','xcorr',cfg);
 beforeHBs=default('beforeHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.3*period
 afterHBs=default('afterHBs',[],cfg); % how long the right side of template HB should be. when empty it gets 0.7*period
-ampLinThr=default('ampLinThr',0.25,cfg);  % threshold for low amplitude HB, use average amplitude when below this ratio   
+ampLinThr=default('ampLinThr',0.25,cfg);  % threshold for low amplitude HB, use average amplitude when below this ratio
 meanMEGhpFilt= default('meanMEGhpFilt',3,cfg); % highpass filter for meanMEG before everything
 badChan= default('badChan',[],cfg);
 barilan=false; % is it Bar-Ilan University data, if so write file in the end
@@ -241,7 +241,7 @@ if ~isempty(dataFiltFreq)
     data = myFilt(data,FiltData);
     meanMEG=myFilt(meanMEG,FiltData);
 end
-    
+
 for chani=1:size(data,1)
     data(chani,:)=data(chani,:)-median(data(chani,:));
 end
@@ -278,13 +278,13 @@ meanMEGf=meanMEGf-median(meanMEGf);
 %% look for a noisy segment and noisy channels
 % find bad channels, has to be noisy for 3 of the first 3 seconds
 if isempty(badChan)
-stdMEG=std(data(:,1:round(sRate))');
-badc1=stdMEG>chanZthr*median(stdMEG);
-stdMEG=std(data(:,round(sRate):round(2*sRate))');
-badc2=stdMEG>chanZthr*median(stdMEG);
-stdMEG=std(data(:,round(2*sRate):round(3*sRate))');
-badc3=stdMEG>chanZthr*median(stdMEG);
-badc=find((badc1+badc2+badc3)==3);
+    stdMEG=std(data(:,1+sampBefore:round(sRate)+sampBefore)');
+    badc1=stdMEG>chanZthr*median(stdMEG);
+    stdMEG=std(data(:,round(sRate)+sampBefore:round(2*sRate)+sampBefore)');
+    badc2=stdMEG>chanZthr*median(stdMEG);
+    stdMEG=std(data(:,round(2*sRate)+sampBefore:round(3*sRate)+sampBefore)');
+    badc3=stdMEG>chanZthr*median(stdMEG);
+    badc=find((badc1+badc2+badc3)==3);
 else
     badc=badChan;
 end
@@ -294,7 +294,7 @@ end
 
 % find jump or other huge artifact
 zMEG=(meanMEGf-mean(meanMEGf))./std(meanMEGf);
-jbeg=find(abs((zMEG))>jZthr,1);% 
+jbeg=find(abs((zMEG))>jZthr,1);%
 j=find(abs((zMEG))>jZthr);
 bads=[]; % bad samples
 if ~isempty(jbeg)
@@ -325,9 +325,9 @@ else
     if length(data)<2^19
         data=data-repmat(median(data,2),1,size(data,2));
     else
-         for chani=1:size(data,1)
+        for chani=1:size(data,1)
             data(chani,:)=data(chani,:)-median(data(chani,:),2);
-         end
+        end
     end
 end
 if isempty(ECG)
@@ -344,7 +344,7 @@ disp('looking for HB peaks')
 % test if, by chance, the HB field is mainly negative
 posHB=true;
 if isempty(ECG)
-        [peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,peakZthr,round(sRate*minPeriod));
+    [peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,peakZthr,round(sRate*minPeriod));
     if median(peaksNeg)/median(peaks)>1.1
         diary('HBlog.txt')
         warning('NEGATIVE HB FIELD? if not, average selected MEG channels and give it as ECG');
@@ -471,8 +471,8 @@ else
         meanMEGxcrF = myFilt(meanMEG,FiltXcr);
     end
 end
-    
-    
+
+
 % meanMEGxcrF = myFilt(meanMEG,BandPassFiltXcr);
 meanMEGxcrF=meanMEGxcrF-median(meanMEGxcrF);
 if posHB
@@ -587,10 +587,10 @@ maxi=maxi-round(sRate/100)+mi-1;
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 if length(ampFiltFreq)==1
     HighPassSpecObj=fdesign.highpass('Fst,Fp,Ast,Ap',ampFiltFreq-1,ampFiltFreq,60,1,sRate);%
-HighPassFilt=design(HighPassSpecObj ,'butter');
-meanMEGampF = myFilt(meanMEG,HighPassFilt);
-% baseline correction again, just in case
-meanMEGampF=meanMEGampF-median(meanMEGampF);
+    HighPassFilt=design(HighPassSpecObj ,'butter');
+    meanMEGampF = myFilt(meanMEG,HighPassFilt);
+    % baseline correction again, just in case
+    meanMEGampF=meanMEGampF-median(meanMEGampF);
 elseif length(ampFiltFreq)==2
     if isequal(ampFiltFreq,[7 90])
         meanMEGampF=meanMEGf;
@@ -760,7 +760,7 @@ if ~exist('afterHBs','var')
     afterHBs=0.7; % after the T wave, before next qrs, 0.7 of period
 end
 if ~exist('beforeHBs','var')
-    beforeHBs=0.3; 
+    beforeHBs=0.3;
 end
 if ~exist('repressTime','var')
     repressTime=20; % how much time to supress
@@ -845,7 +845,7 @@ for HBi=1:length(Ipeaks);
         else
             endPrev=overlap;
         end
-%         sampDif=round(sRate/50);
+        %         sampDif=round(sRate/50);
         reducVec=1:-1/endPrev:1/endPrev;
         reducVecLR=fliplr(reducVec);
         reducVec(end+1:length(temp))=0;
@@ -890,7 +890,7 @@ for HBi=1:length(Ipeaks);
         else
             endPrev=overlap;
         end
-%         sampDif=round(sRate/50);
+        %         sampDif=round(sRate/50);
         reducVec=1:-1/endPrev:1/endPrev;
         reducVecLR=fliplr(reducVec);
         reducVec(end+1:size(temp,2))=0;
