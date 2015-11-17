@@ -184,6 +184,21 @@ if isempty(data) || exist('var4DfileName','var');
     var4Dhdr = get(var4Dp, 'header');
     var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
     var4Dchi = channel_index(var4Dp, 'meg', 'name');
+    cnf = get(var4Dp, 'config');
+    if strcmp(cnf.config_data.site_name,'Bar Ilan')
+        barilan=true;
+        biuFileName=var4DfileName;
+        var4DchiX = channel_index(var4Dp, 'EXTERNAL', 'name');
+        lastMEG=length(var4Dchi);
+        if length(var4DchiX)>5
+            doX=true;
+            var4Dchi=[var4Dchi,var4DchiX(4:6)];
+            labels=channel_name(var4Dp, var4Dchi);
+            %data(end+1:end+3,:) = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
+        else
+            doX=false;
+        end
+    end
     display(['reading ',var4DfileName]);
     data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
     %data=double(data);
@@ -195,11 +210,7 @@ if isempty(data) || exist('var4DfileName','var');
         figOptions.label=var4Dlabel;
         figOptions.layout='4D248.lay';
     end
-    cnf = get(var4Dp, 'config');
-    if strcmp(cnf.config_data.site_name,'Bar Ilan')
-        barilan=true;
-        biuFileName=var4DfileName;
-    end
+
     clear var4D*
 end
 
@@ -207,7 +218,7 @@ if ~isempty(ECG)
     meanMEG=ECG;
     %meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 else
-    meanMEG=double(mean(data));
+        meanMEG=double(mean(data(1:lastMEG,:)));
 end
 if ~isempty(meanMEGhpFilt)
     mmhpObj  = fdesign.highpass('N,F3dB', 10, meanMEGhpFilt, sRate);
@@ -215,7 +226,7 @@ if ~isempty(meanMEGhpFilt)
     meanMEG=myFilt(meanMEG,mmhpFilt);
 end
 repressTime=default('repressTime',round(sRate/50),cfg);
-%% pad with zeros for templite slide
+%% pad with zeros for template slide
 sampBefore=round(sRate*maxPeriod);
 time=-sampBefore/sRate:1/sRate:(size(data,2)+sampBefore)/sRate;
 time=time(2:end);
@@ -278,11 +289,11 @@ meanMEGf=meanMEGf-median(meanMEGf);
 %% look for a noisy segment and noisy channels
 % find bad channels, has to be noisy for 3 of the first 3 seconds
 if isempty(badChan)
-    stdMEG=std(data(:,1+sampBefore:round(sRate)+sampBefore)');
+    stdMEG=std(data(1:lastMEG,1+sampBefore:round(sRate)+sampBefore)');
     badc1=stdMEG>chanZthr*median(stdMEG);
-    stdMEG=std(data(:,round(sRate)+sampBefore:round(2*sRate)+sampBefore)');
+    stdMEG=std(data(1:lastMEG,round(sRate)+sampBefore:round(2*sRate)+sampBefore)');
     badc2=stdMEG>chanZthr*median(stdMEG);
-    stdMEG=std(data(:,round(2*sRate)+sampBefore:round(3*sRate)+sampBefore)');
+    stdMEG=std(data(1:lastMEG,round(2*sRate)+sampBefore:round(3*sRate)+sampBefore)');
     badc3=stdMEG>chanZthr*median(stdMEG);
     badc=find((badc1+badc2+badc3)==3);
 else
@@ -331,7 +342,7 @@ else
     end
 end
 if isempty(ECG)
-    meanMEG=double(mean(data));
+    meanMEG=double(mean(data(1:lastMEG,:)));
     if ~isempty(meanMEGhpFilt)
         meanMEG=myFilt(meanMEG,mmhpFilt);
     end
@@ -377,7 +388,7 @@ end
 if figs
     if isfield(figOptions,'layout') && isfield(figOptions,'label')
         topo={};
-        topo.avg=median(data(:,Ipeaks),2);
+        topo.avg=median(data(1:lastMEG,Ipeaks),2);
         topo.time=0;
         topo.label=figOptions.label;
         topo.dimord='chan_time';
@@ -415,7 +426,7 @@ if figs
         warning('no topoplot without labels and layout fields! see figOptions options')
     end
 end
-topoTrace=median(data(:,Ipeaks),2)'*data;
+topoTrace=median(data(1:lastMEG,Ipeaks),2)'*data(1:lastMEG,:);
 topoTrace=myFilt(topoTrace,BandPassFilt);
 topoTrace=topoTrace-median(topoTrace);
 % if ~posHB
@@ -433,7 +444,7 @@ end
 
 
 %% check if topo of every peak is correlated to average topo
-r=corr(data(:,Ipeaks),median(data(:,Ipeaks),2));
+r=corr(data(1:lastMEG,Ipeaks),median(data(1:lastMEG,Ipeaks),2));
 if figs
     figure;
     plot(time,topoTraceN)
@@ -670,14 +681,14 @@ if ~isempty(badSNR)
     end
 end
 % clear some memory
-meanData=mean(data);
+meanData=mean(data(1:lastMEG,:));
 MEGmean=meanMEG;
 clear meanMEG* topoTra*
 meanMEG=MEGmean;
 clear MEGmean;
 % prepare avg HB fig
 HBtimes=(Ipeaks2in-sampBefore)/sRate;
-[avgHB,avgTimes]=meanHB(data(:,sampBefore+1:end-sampBefore),sRate,HBtimes);
+[avgHB,avgTimes]=meanHB(data(1:lastMEG,sampBefore+1:end-sampBefore),sRate,HBtimes);
 % clean
 display('cleaning channels from template one by one, may take half a minute')
 for chani=1:size(HBtemp,1)
@@ -693,12 +704,12 @@ figure;
 if isempty(ECG)
     plot(time,MCG,'k')
 else
-    scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(data(:,sampBefore+1:sampBefore+round(sRate*5)))));
+    scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(data(1:lastMEG,sampBefore+1:sampBefore+round(sRate*5)))));
     plot(time,meanMEG/scale,'k')
 end
 hold on
 plot(time,meanData,'r')
-plot(time,mean(data),'g')
+plot(time,mean(data(1:lastMEG,:)),'g')
 if isempty(ECG)
     legend('MCG from template', 'mean MEG','mean clean MEG')
 else
@@ -722,7 +733,7 @@ if figs
         end
     end
 end
-avgHBclean=meanHB(data(:,sampBefore+1:end-sampBefore),sRate,HBtimes);
+avgHBclean=meanHB(data(1:lastMEG,sampBefore+1:end-sampBefore),sRate,HBtimes);
 figure;plot(avgTimes,mean(avgHB),'r')
 hold on
 plot(avgTimes,mean(avgHBclean),'g')
@@ -751,7 +762,13 @@ if EK <3
 end
 if barilan
     display('saving hb* file')
-    rewrite_pdf(data,[],biuFileName,'hb')
+    if doX
+        
+        rewrite_pdf(data,labels,biuFileName,'hb')
+    else
+        
+        rewrite_pdf(data,[],biuFileName,'hb')
+    end
 end
 
 %% internal functions
