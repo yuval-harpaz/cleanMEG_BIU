@@ -213,6 +213,9 @@ if isempty(data) || exist('var4DfileName','var');
 
     clear var4D*
 end
+if ~exist('lastMEG','var')
+    lastMEG=size(data,1);
+end
 
 if ~isempty(ECG)
     meanMEG=ECG;

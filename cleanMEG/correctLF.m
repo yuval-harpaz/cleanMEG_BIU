@@ -132,6 +132,7 @@ if ischar(data)
         end
     end
 end
+barilan=false;
 if isempty(data) || exist('var4DfileName','var');
     if ~exist('var4DfileName','var');
         try
