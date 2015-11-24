@@ -16,10 +16,10 @@ end
 L = size(rows,2)/Fs;                     % Length of signal
 NFFT = round(Fs); % this gives bins of roughly  1Hz
 secCount=1;
-if NFFT<size(rows,2)
+if NFFT<=size(rows,2)
     for seci=1:NFFT:(size(rows,2))
         if seci==1
-            Y = fft(rows',NFFT);
+            Y = fft(rows(:,1:NFFT)',NFFT);
         else
             try % should fail for too short, end of the rows
                 secCount=secCount+1;
