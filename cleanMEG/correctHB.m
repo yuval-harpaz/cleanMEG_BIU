@@ -37,7 +37,9 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % trace (meanMEG). Another filter can be used there, in order to supress T
 % for better timing. When the R is small the T can help with the template
 % match, so leave some low frequencies in. Use tempFiltFreq for this one.
-% I added filtering option dataFiltFreq for the data (and meanMEG) to get rid of low
+% 
+%% cfg options
+%  - cfg.dataFiltFreq is a filtering option  for the data (and meanMEG) to get rid of low
 % frequencies (DC recordings). Not performed by default.
 %  - cfg.chanSnrThr (default 0) is the threshold (in z scores) that tell which channels are cleaned and which
 % remain as are. Use 0 to clean all. SNR here is how much heartbeat peak
@@ -165,7 +167,6 @@ if ischar(data)
         end
     end
 end
-
 if isempty(data) || exist('var4DfileName','var');
     if ~exist('var4DfileName','var');
         try
@@ -179,6 +180,9 @@ if isempty(data) || exist('var4DfileName','var');
         end
         var4DfileName=['./',var4DfileName(1:end-1)];
     end
+    data4D=true;
+    ipFileName=var4DfileName;
+    doX=false;
     var4Dp=pdf4D(var4DfileName);
     sRate=double(get(var4Dp,'dr'));
     var4Dhdr = get(var4Dp, 'header');
@@ -187,7 +191,6 @@ if isempty(data) || exist('var4DfileName','var');
     cnf = get(var4Dp, 'config');
     if strcmp(cnf.config_data.site_name,'Bar Ilan')
         barilan=true;
-        biuFileName=var4DfileName;
         var4DchiX = channel_index(var4Dp, 'EXTERNAL', 'name');
         lastMEG=length(var4Dchi);
         if length(var4DchiX)>5
@@ -195,8 +198,6 @@ if isempty(data) || exist('var4DfileName','var');
             var4Dchi=[var4Dchi,var4DchiX(4:6)];
             labels=channel_name(var4Dp, var4Dchi);
             %data(end+1:end+3,:) = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
-        else
-            doX=false;
         end
     end
     display(['reading ',var4DfileName]);
@@ -289,7 +290,7 @@ end
 meanMEGf=meanMEGf-median(meanMEGf);
 
 
-%% look for a noisy segment and noisy channels
+%% look for a noisy segments and noisy channels
 % find bad channels, has to be noisy for 3 of the first 3 seconds
 if isempty(badChan)
     stdMEG=std(data(1:lastMEG,1+sampBefore:round(sRate)+sampBefore)');
@@ -346,7 +347,10 @@ else
 end
 if isempty(ECG)
     meanMEG=double(mean(data(1:lastMEG,:)));
+        
+    meanMEG(end-sampBefore+1:end)=median(meanMEG(end-2*sampBefore:end-sampBefore));
     if ~isempty(meanMEGhpFilt)
+        meanMEG=meanMEG-mean(meanMEG(1:sampBefore));
         meanMEG=myFilt(meanMEG,mmhpFilt);
     end
     meanMEGf = myFilt(meanMEG,BandPassFilt);
@@ -430,6 +434,8 @@ if figs
     end
 end
 topoTrace=median(data(1:lastMEG,Ipeaks),2)'*data(1:lastMEG,:);
+topoTrace(end-sampBefore+1:end)=median(topoTrace(end-2*sampBefore:end-sampBefore));
+topoTrace=topoTrace-mean(topoTrace(1:sampBefore));
 topoTrace=myFilt(topoTrace,BandPassFilt);
 topoTrace=topoTrace-median(topoTrace);
 % if ~posHB
@@ -458,6 +464,12 @@ if figs
 end
 %% average good HB and make a template
 IpeaksR=Ipeaks(r>0.5);
+if length(IpeaksR)<(length(Ipeaks/2))
+    IpeaksR=Ipeaks(r>prctile(r,25));
+    diary('HBlog.txt')
+    disp(['poor correlation between median topography and each HB, adjusting rThr to ',num2str(prctile(r,25))]);
+    diary off
+end
 IpeaksR=IpeaksR(IpeaksR>sampBefore);
 IpeaksR=IpeaksR(IpeaksR<(size(data,2)-sampBefore));
 period2=diff(IpeaksR)/sRate; % estimate period
@@ -763,14 +775,12 @@ if EK <3
     fprintf(2,txt);
     diary off
 end
-if barilan
+if nargout==0 && data4D
     display('saving hb* file')
     if doX
-        
-        rewrite_pdf(data,labels,biuFileName,'hb')
+        rewrite_pdf(data,labels,ipFileName,'hb')
     else
-        
-        rewrite_pdf(data,[],biuFileName,'hb')
+        rewrite_pdf(data,[],ipFileName,'hb')
     end
 end
 

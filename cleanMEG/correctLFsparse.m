@@ -143,7 +143,6 @@ if isempty(data) || exist('var4DfileName','var');
         var4DfileName=['./',var4DfileName(1:end-1)];
     end
     data4D=true;
-    ipFileName=var4DfileName;
     var4Dp=pdf4D(var4DfileName);
     sRate=double(get(var4Dp,'dr'));
     var4Dhdr = get(var4Dp, 'header');
@@ -497,24 +496,26 @@ else
         display(['cleaning ',num2str(length(good)),' channels one by one, wait about ',timeEstimate,'min. channel '])
     end
     % do the cleaning
-    
+    CD=sparse(size(cleanData));
     if par
         parfor chani=2:length(good)
             wu=whereUp+lag(chani);
             wu=wu(wu>0);
             wu=wu(wu<size(data,2));
-            [cleanData(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
+            [CD(chani,:),~,nSamp{chani,1}]=cleanLineFinternal(cleanData(chani,:), wu, [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
             if reverse
-                fowAndRev=cleanData(chani,:);
+                fowAndRev=CD(chani,:);
                 temp=cleanLineFinternal(fliplr(data(chani,:)), fliplr(size(data,2)-whereUp+1), [], upper(method),[],Ncycles,noiseType,noiseThr,sRate,cycLength);
                 temp=fliplr(temp);
                 rev1=Ncycles*cycLength; % good samples only from reverse cleaning
                 rev2=size(data,2)-rev1+1;
                 fowAndRev(1:rev1)=temp(1:rev1);
                 fowAndRev(rev1+1:rev2-1)=(fowAndRev(rev1+1:rev2-1)+temp(rev1+1:rev2-1))./2;
-                cleanData(chani,:)=fowAndRev;
+                CD(chani,:)=fowAndRev;
             end
         end
+        cleanData(2:end,:)=CD(2:end,:);
+        clear CD
     else
         for chani=2:length(good)
             wu=whereUp+lag(chani);
@@ -577,7 +578,7 @@ end
 display('done cleaning LF')
 if nargout==0 && data4D
     display('saving lf_ file')
-    rewrite_pdf(cleanData,[],ipFileName,'lf')
+    rewrite_pdf(cleanData,[],biuFileName,'lf')
 end
 %% Functions
 function [Lfreq,meanPSD]=findLfreq(fourier,freq)
