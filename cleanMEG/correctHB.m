@@ -74,14 +74,18 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % fit between (unfiltered) template and filtered data.
 %  - cfg.ampLinThr (0.25) is linear regression r threshold. If there is no good
 %  fit between template QRS and an instance of a heart beat, amplitude will not
-%  be assesed by r, the average HB amp will be given.
+%  be assesed by r, the average HB amp will be given. use cfg.ampLinThr =
+%  0; for not adjusting amplitude HB by HB, remove mean template as is for
+%  every HB (good when HB are rather small).
+%  - cfg.ampMethod can be '5cat' (five HB size categories) or 'HBbyHB'
+%  (correct each HB by the amplitude estimate, less recommended).
 %  - cfg.afterHBs (0.7 of the period) is how long the template should continue after the
 % peak (seconds)
 %  - cfg.beforeHBs (0.3 of the period) is when the template should start before the
 % peak (seconds)
 %  - cfg.repressTime (20ms) is how much of the template to repress to zero on
 %  the edges.
-
+% 
 %% output
 %  - data is a matrix of cleaned data
 %  - HBtimes is the times when HB peaks were detected
@@ -142,6 +146,7 @@ afterHBs=default('afterHBs',[],cfg); % how long the right side of template HB sh
 ampLinThr=default('ampLinThr',0.25,cfg);  % threshold for low amplitude HB, use average amplitude when below this ratio
 meanMEGhpFilt= default('meanMEGhpFilt',3,cfg); % highpass filter for meanMEG before everything
 badChan= default('badChan',[],cfg);
+ampMethod= default('ampMethod','5cat',cfg);
 barilan=false; % is it Bar-Ilan University data, if so write file in the end
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
@@ -235,7 +240,9 @@ sampBefore=round(sRate*maxPeriod);
 time=-sampBefore/sRate:1/sRate:(size(data,2)+sampBefore)/sRate;
 time=time(2:end);
 meanMEG=[zeros(1,sampBefore),meanMEG,zeros(1,sampBefore)];
+meanMEG(end-sampBefore+1:end)=median(meanMEG(end-2*sampBefore:end-sampBefore));
 data=[zeros(size(data,1),sampBefore),data,zeros(size(data,1),sampBefore)];
+data(:,end-sampBefore+1:end)=repmat(median(data(:,end-2*sampBefore:end-sampBefore),2),1,sampBefore);
 %% Filter data if requested
 if ~isempty(dataFiltFreq)
     display('filtering the data')
@@ -313,17 +320,27 @@ jbeg=find(abs((zMEG))>jZthr,1);%
 j=find(abs((zMEG))>jZthr);
 bads=[]; % bad samples
 if ~isempty(jbeg)
-    %jend=find(abs((zMEG))>zThr,1,'last');
-    %jend2=find(abs(zMEG(jend:end))>1,1,'last')+jend-1;
     for jumpi=1:length(j)
         bads=[bads,j(jumpi)-round(sRate*jPad):j(jumpi)+sRate*jPad]; %#ok<AGROW>
     end
-    %bads(bads<sampBefore+1)=sampBefore+1;
     bads=unique(bads);
     bads=bads(bads>0);
     badData=data(:,bads);
-    %bads=(jbeg-round(sRate./2)):(jend2+round(sRate*0.5));
-    data(:,bads)=0;
+    if unique(diff(bads))==1
+        % here is an attempt to avoid hp filter, setting bad data not to
+        % zero but to a line connecting the good parts. works only for one
+        % bad segment
+        for chani=1:size(data,1)
+            if ~ismember(chani,badc)
+                BL0=mean(data(chani,(bads(1)-round(sRate*0.1)):(bads(1)-1)));
+                BL1=mean(data(chani,(bads(end)+1):(bads(end)+round(sRate*0.1))));
+                linConnect=BL0:((BL1-BL0)/length(bads)):BL1;
+                data(chani,bads)=linConnect(2:end);
+            end
+        end
+    else
+        data(chani,bads)=0;
+    end
     if length(data)<2^19
         data=data-repmat(median(data,2),1,size(data,2));
     else
@@ -610,7 +627,13 @@ maxi=round(beforeHBs*Period*sRate)+1;
 [~,mi]=max(templateHB(maxi-round(sRate/100):maxi+round(sRate/100)));
 maxi=maxi-round(sRate/100)+mi-1;
 %% test R amplitude
+
+% %make temp per chan
+% sBef=maxi-1;
+% sAft=length(templateHB)-maxi;
+% HBtemp=HBbyChan(data,Ipeaks2in,sBef,sAft,repressTime);
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
+% 
 if length(ampFiltFreq)==1
     HighPassSpecObj=fdesign.highpass('Fst,Fp,Ast,Ap',ampFiltFreq-1,ampFiltFreq,60,1,sRate);%
     HighPassFilt=design(HighPassSpecObj ,'butter');
@@ -629,26 +652,38 @@ elseif length(ampFiltFreq)==2
         % baseline correction again, just in case
         meanMEGampF=meanMEGampF-median(meanMEGampF);
     end
+elseif isempty(ampFiltFreq)
+    meanMEGampF=meanMEG;
+    disp('not filtering meanMEG for testing R amplitude!')
 else
     error('wrong length of vector. one number (2) means hp filter, two ([2 90]) means bp')
 end
 
 [p,Rlims]=assessAmp(templateHB,maxi,Ipeaks2in,meanMEGampF);
+% % if strcmp(ampMethod,'HBbyHBtopo')
+% % [templateHBtopo,PeriodTopo]=makeTempHB(meanMEGampF,sRate,Ipeaks2in,period3,sampBefore,figs,maxPeriod,beforeHBs,afterHBs,repressTime);
+% % [p,Rlims]=assessAmp(templateHBtopo,maxi,Ipeaks2in,meanMEGampF);
+
 % look for neg correlation between template peak and peaks, means trouble
 % if there are too many
-
-if posHB
-    negp=find(p(:,1)<ampLinThr);
+if ampLinThr==0
+    ampMMfit=ones(size(p,1),1);
 else
-    negp=find(p(:,1)>ampLinThr);
+    if posHB
+        negp=find(p(:,1)<ampLinThr);
+    else
+        negp=find(p(:,1)>ampLinThr);
+    end
+    if ~isempty(negp)
+        p(negp,1:2)=0;
+        diary('HBlog.txt')
+        warning(['did not get good fit for amplitude test, assume average HB amplitude at ',num2str(time(Ipeaks2in(negp)))])
+        diary off
+    end
+    ampMMfit=p(:,1)+(p(:,2)./templateHB(maxi));
 end
-if ~isempty(negp)
-    p(negp,1:2)=0;
-    diary('HBlog.txt')
-    warning(['did not get good fit for amplitude test, assume average HB amplitude at ',num2str(time(Ipeaks2in(negp)))])
-    diary off
-end
-ampMMfit=p(:,1)+(p(:,2)./templateHB(maxi));
+
+
 if posHB
     MCG=makeMCG(templateHB,maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
 else
@@ -706,13 +741,58 @@ HBtimes=(Ipeaks2in-sampBefore)/sRate;
 [avgHB,avgTimes]=meanHB(data(1:lastMEG,sampBefore+1:end-sampBefore),sRate,HBtimes);
 % clean
 display('cleaning channels from template one by one, may take half a minute')
-for chani=1:size(HBtemp,1)
-    if posHB
-        MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
-    else
-        MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
-    end
-    data(chani,:)=data(chani,:)-MCGall;
+if ampLinThr==0
+    ampMethod='HBbyHB';
+    %not to make 5 categories
+end
+switch ampMethod
+    case '5cat' % 5 categories of HB
+        [~,sorted]=sort(ampMMfit);
+        len=floor(length(sorted)/5);
+            
+        for chani=1:lastMEG
+            MCGall=zeros(size(meanMEG));
+            for cati=1:5
+                if cati<5
+                    HBcat=sorted(len*(cati-1)+1:len*cati);
+                else
+                    HBcat=sorted(len*(cati-1)+1:end);
+                end
+                HBtempCat=HBbyChan(data(chani,:),Ipeaks2in(HBcat),sBef,sAft,repressTime);
+                %HBtempCat=HBbyChan(data(1:lastMEG,:),Ipeaks2in(HBcat(:,cati)),sBef,sAft,repressTime);
+                HBtempCat(1:Rlims(1))=HBtemp(chani,1:Rlims(1));
+                HBtempCat(Rlims(2):end)=HBtemp(chani,Rlims(2):end);
+                amp1=ones(length(HBcat),1);
+                
+                if posHB
+                    MCGall=MCGall+makeMCGbyCh(HBtempCat,maxi,Rlims,Ipeaks2in(HBcat),amp1,length(meanMEG));
+                else
+                    MCGall=MCGall+makeMCGbyCh(HBtempCat,maxi,Rlims,Ipeaks2in(HBcat),-amp1,length(meanMEG));
+                end
+                
+            end
+            data(chani,:)=data(chani,:)-MCGall;
+        end
+        %plot(squeeze(mean(HBtemps,1)))
+
+%         for chani=1:size(HBtemp,1)
+%             if posHB
+%                 MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
+%             else
+%                 MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
+%             end
+%             data(chani,:)=data(chani,:)-MCGall;
+%         end
+    case 'HBbyHB'
+        
+        for chani=1:size(HBtemp,1)
+            if posHB
+                MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
+            else
+                MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
+            end
+            data(chani,:)=data(chani,:)-MCGall;
+        end
 end
 %cleanData=data-MCGall;
 figure;
