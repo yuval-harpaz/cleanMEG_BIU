@@ -95,6 +95,8 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %  - Rtopo is the topography at the peak of R, similar to component
 %  analysis topography (just cleaner)
 %
+%% Save File
+% when no output arguments are given a 4D or a fif file will be saved!
 %% Examples
 % 4D users can run the function from the folder with the data ('c,*') file, with no
 % input arguments:
@@ -148,13 +150,53 @@ meanMEGhpFilt= default('meanMEGhpFilt',3,cfg); % highpass filter for meanMEG bef
 badChan= default('badChan',[],cfg);
 ampMethod= default('ampMethod','5cat',cfg);
 barilan=false; % is it Bar-Ilan University data, if so write file in the end
+dataType='unknown';
 %% checking defaults for 4D data
 % to use with data=[] and sRate=[];
 if ~exist('data','var')
     data=[];
     sRate=[];
 end
+if isempty(data)
+    try
+        rawFileName=ls('*c,rf*');
+        try
+            rawFileName=ls('xc,lf_c,*');
+        catch %#ok<CTCH>
+            try
+                rawFileName=ls('lf_c,*');
+            catch
+                rawFileName=ls('c,rf*');
+            end
+        end
+        data=['./',rawFileName(1:end-1)];
+        dataType='4D';
+    catch
+        try
+            rawFileName=ls('*raw.fif');
+            if length(regexp(rawFileName,'raw.fif'))==1
+                data=['./',rawFileName(1:end-1)];
+                dataType='fif';
+            else
+                fprintf(2,'more than one raw.fif files? specify the name please thank you very much')
+                return
+            end
+        catch
+            error('cannot figure out which data type it is, give me the data matrix or filename')
+        end
+    end
+end
 if ischar(data)
+    if strcmp(data(end-2:end),'fif')
+        dataType='fif';
+    else
+        if ~strcmp(dataType,'4D') && ~strcmp(data(end-3:end),'.mat')
+            if ~isempty(findstr('c,rf',data))
+                dataType='4D';
+            end
+        end
+    end      
+    % can be .mat or raw MEG data filename
     if strcmp(data(end-3:end),'.mat') % read matrix from file 'data.mat'
         PWD=pwd;
         display(['loading ',PWD,'/',data,]);
@@ -162,51 +204,29 @@ if ischar(data)
         dataField=fieldnames(data);
         
         eval(['data=data.',dataField{1,1},';']);
-    else % read 4D data from file name specified in 'data'
-        cloc=strfind(data,'c');
-        comaloc=strfind(data,',');
-        if ~isempty(cloc) && ~isempty(comaloc)
-            if comaloc(end)>cloc(1)
-                var4DfileName=data;
+    elseif strcmp(dataType,'4D') % read 4D data from file name specified in 'data'
+        var4DfileName=data;
+        ipFileName=var4DfileName;
+        doX=false;
+        var4Dp=pdf4D(var4DfileName);
+        sRate=double(get(var4Dp,'dr'));
+        var4Dhdr = get(var4Dp, 'header');
+        var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
+        var4Dchi = channel_index(var4Dp, 'meg', 'name');
+        cnf = get(var4Dp, 'config');
+        if strcmp(cnf.config_data.site_name,'Bar Ilan')
+            barilan=true;
+            var4DchiX = channel_index(var4Dp, 'EXTERNAL', 'name');
+            lastMEG=length(var4Dchi);
+            if length(var4DchiX)>5
+                doX=true;
+                var4Dchi=[var4Dchi,var4DchiX(4:6)];
+                labels=channel_name(var4Dp, var4Dchi);
+                %data(end+1:end+3,:) = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
             end
         end
-    end
-end
-if isempty(data) || exist('var4DfileName','var');
-    if ~exist('var4DfileName','var');
-        try
-            var4DfileName=ls('xc,lf_c,*');
-        catch %#ok<CTCH>
-            try
-                var4DfileName=ls('lf_c,*');
-            catch
-                var4DfileName=ls('c,*');
-            end
-        end
-        var4DfileName=['./',var4DfileName(1:end-1)];
-    end
-    data4D=true;
-    ipFileName=var4DfileName;
-    doX=false;
-    var4Dp=pdf4D(var4DfileName);
-    sRate=double(get(var4Dp,'dr'));
-    var4Dhdr = get(var4Dp, 'header');
-    var4DnSamp=var4Dhdr.epoch_data{1,1}.pts_in_epoch;
-    var4Dchi = channel_index(var4Dp, 'meg', 'name');
-    cnf = get(var4Dp, 'config');
-    if strcmp(cnf.config_data.site_name,'Bar Ilan')
-        barilan=true;
-        var4DchiX = channel_index(var4Dp, 'EXTERNAL', 'name');
-        lastMEG=length(var4Dchi);
-        if length(var4DchiX)>5
-            doX=true;
-            var4Dchi=[var4Dchi,var4DchiX(4:6)];
-            labels=channel_name(var4Dp, var4Dchi);
-            %data(end+1:end+3,:) = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
-        end
-    end
-    display(['reading ',var4DfileName]);
-    data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
+        display(['reading ',var4DfileName]);
+        data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
     %data=double(data);
     if figs
         var4Dlabel=channel_label(var4Dp,var4Dchi)';
@@ -216,8 +236,55 @@ if isempty(data) || exist('var4DfileName','var');
         figOptions.label=var4Dlabel;
         figOptions.layout='4D248.lay';
     end
-
     clear var4D*
+    elseif strcmp(dataType,'fif')
+        if isempty(which('fiff_read_raw_segment'))
+            error('trying to read neuromag data requires fiff_read_raw_segment.m in path');
+        else
+            
+            
+            infile=data;
+            if strcmp(infile(1:2),'./')
+                outfile=['./hb,',infile(3:end)];
+            else
+                outfile=['hb,',infile];
+            end
+            raw=fiff_setup_read_raw(data);
+            [data,times] = fiff_read_raw_segment(raw,raw.first_samp,raw.last_samp);
+            sRate=1/diff(times(1:2));
+            clear times
+            magCount=0;
+            megCount=0;
+            for chani=1:length(raw.info.ch_names)
+                if strcmp(raw.info.ch_names{chani}(1:3),'MEG')
+                    megCount=megCount+1;
+                    megi(megCount)=chani;
+                    if strcmp(raw.info.ch_names{chani}(end),'1')
+                        magCount=magCount+1;
+                        magi(magCount)=chani;
+                    end
+                end
+            end
+%             hdr=ft_read_header(data);
+%             %trl=[1,hdr.nSamples,0];
+%             cfg=[];
+%             %cfg.trl=trl;
+%             cfg.demean='yes';
+%             cfg.dataset=data;
+%             cfg.channel='MEGMAG';
+%             mag=ft_preprocessing(cfg);
+            ECG=mean(data(magi,:));
+%             cfg.channel='MEG';
+%             data=ft_preprocessing(cfg);
+%             sRate=data.fsample;
+            data=data(megi,:);
+%             figOptions.label=meg.label;
+%             figOptions.layout='neuromag306mag.lay';
+%            clear mag
+            %[cleanMEG,tempMEG,periodMEG,mcgMEG,RtopoMEG]=correctHB(meg.trial{1,1},meg.fsample,0,meanMAG);
+            
+        end
+    end
 end
 if ~exist('lastMEG','var')
     lastMEG=size(data,1);
@@ -681,6 +748,7 @@ else
         diary off
     end
     ampMMfit=p(:,1)+(p(:,2)./templateHB(maxi));
+    ampMMfit(ampMMfit>1.5)=1;
 end
 
 
@@ -762,6 +830,7 @@ switch ampMethod
                 %HBtempCat=HBbyChan(data(1:lastMEG,:),Ipeaks2in(HBcat(:,cati)),sBef,sAft,repressTime);
                 HBtempCat(1:Rlims(1))=HBtemp(chani,1:Rlims(1));
                 HBtempCat(Rlims(2):end)=HBtemp(chani,Rlims(2):end);
+                HBtempCatAll(chani,1:size(HBtempCat,2),cati)=HBtempCat;
                 amp1=ones(length(HBcat),1);
                 
                 if posHB
@@ -773,16 +842,12 @@ switch ampMethod
             end
             data(chani,:)=data(chani,:)-MCGall;
         end
-        %plot(squeeze(mean(HBtemps,1)))
-
-%         for chani=1:size(HBtemp,1)
-%             if posHB
-%                 MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,ampMMfit,length(meanMEG));
-%             else
-%                 MCGall=makeMCGbyCh(HBtemp(chani,:),maxi,Rlims,Ipeaks2in,-ampMMfit,length(meanMEG));
-%             end
-%             data(chani,:)=data(chani,:)-MCGall;
-%         end
+        if figs
+            figure;
+            plot(squeeze(mean(HBtempCatAll)));
+            legend(num2str([1:5]'));
+            title('average HB by size category')
+        end
     case 'HBbyHB'
         
         for chani=1:size(HBtemp,1)
@@ -855,12 +920,24 @@ if EK <3
     fprintf(2,txt);
     diary off
 end
-if nargout==0 && data4D
+if nargout==0 
+    if strcmp(dataType,'4D')
     display('saving hb* file')
     if doX
         rewrite_pdf(data,labels,ipFileName,'hb')
     else
         rewrite_pdf(data,[],ipFileName,'hb')
+    end
+    elseif strcmp(dataType,'fif')
+        copyfile(infile,outfile);
+        [outfid,cals] = fiff_start_writing_raw(outfile,raw.info);
+        dataAll = fiff_read_raw_segment(raw,raw.first_samp,raw.last_samp);
+        dataAll(megi,:)=data;
+        clear data
+        fiff_write_raw_buffer(outfid,dataAll,cals);
+        fiff_finish_writing_raw(outfid);
+        data=dataAll(megi,:);
+        clear dataAll
     end
 end
 
@@ -919,7 +996,7 @@ if length(ipxc)>1
         period4=median(diff(ipxc))/sRate;
     end
 else
-    warning('could not find cross correlation within extended template, guessing period')
+%    warning('could not find cross correlation within extended template, guessing period')
     period4=period;
 end
 temp=HB(sampBefore-round(sRate*beforeHBs*period4):sampBefore+round(sRate*afterHBs*period4));
