@@ -1,9 +1,9 @@
 function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 % [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOptions,ECG,cfg)
 % HB components
-%     /\      _____         /\      _____
-% __ /  \  __/     \______ /  \  __/     \__...
-%   /    \/               /    \/
+%      /\      _____          /\      _____
+% __  /  \  __/     \______  /  \  __/     \__...
+%   \/    \/               \/    \/
 %   Q  R  S     T
 %
 %% Input
@@ -37,7 +37,7 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % trace (meanMEG). Another filter can be used there, in order to supress T
 % for better timing. When the R is small the T can help with the template
 % match, so leave some low frequencies in. Use tempFiltFreq for this one.
-% 
+%
 %% cfg options
 %  - cfg.dataFiltFreq is a filtering option  for the data (and meanMEG) to get rid of low
 % frequencies (DC recordings). Not performed by default.
@@ -85,7 +85,7 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % peak (seconds)
 %  - cfg.repressTime (20ms) is how much of the template to repress to zero on
 %  the edges.
-% 
+%
 %% output
 %  - data is a matrix of cleaned data
 %  - HBtimes is the times when HB peaks were detected
@@ -181,21 +181,34 @@ if isempty(data)
                 fprintf(2,'more than one raw.fif files? specify the name please thank you very much')
                 return
             end
-        catch
-            error('cannot figure out which data type it is, give me the data matrix or filename')
+        end
+        PWD=pwd;
+        if strcmp(PWD(end-2:end),'.ds')
+            data=PWD;
+        else
+            ctfDir=dir('*.ds');
+            if length(ctfDir)~=1
+                error('cannot figure out which data type it is, give me the data matrix or filename')
+            else
+                cd(ctfDir.name)
+                data=pwd;
+                cd ../
+            end
         end
     end
 end
 if ischar(data)
     if strcmp(data(end-2:end),'fif')
         dataType='fif';
+    elseif strcmp(data(end-2:end),'.ds')
+        dataType='ctf';
     else
         if ~strcmp(dataType,'4D') && ~strcmp(data(end-3:end),'.mat')
             if ~isempty(findstr('c,rf',data))
                 dataType='4D';
             end
         end
-    end      
+    end
     % can be .mat or raw MEG data filename
     if strcmp(data(end-3:end),'.mat') % read matrix from file 'data.mat'
         PWD=pwd;
@@ -227,22 +240,20 @@ if ischar(data)
         end
         display(['reading ',var4DfileName]);
         data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
-    %data=double(data);
-    if figs
-        var4Dlabel=channel_label(var4Dp,var4Dchi)';
-        if figOptions==1;
-            clear figOptions
+        %data=double(data);
+        if figs
+            var4Dlabel=channel_label(var4Dp,var4Dchi)';
+            if figOptions==1;
+                clear figOptions
+            end
+            figOptions.label=var4Dlabel;
+            figOptions.layout='4D248.lay';
         end
-        figOptions.label=var4Dlabel;
-        figOptions.layout='4D248.lay';
-    end
-    clear var4D*
+        clear var4D*
     elseif strcmp(dataType,'fif')
         if isempty(which('fiff_read_raw_segment'))
             error('trying to read neuromag data requires fiff_read_raw_segment.m in path');
         else
-            
-            
             infile=data;
             if strcmp(infile(1:2),'./')
                 outfile=['./hb,',infile(3:end)];
@@ -265,24 +276,28 @@ if ischar(data)
                     end
                 end
             end
-%             hdr=ft_read_header(data);
-%             %trl=[1,hdr.nSamples,0];
-%             cfg=[];
-%             %cfg.trl=trl;
-%             cfg.demean='yes';
-%             cfg.dataset=data;
-%             cfg.channel='MEGMAG';
-%             mag=ft_preprocessing(cfg);
             ECG=mean(data(magi,:));
-%             cfg.channel='MEG';
-%             data=ft_preprocessing(cfg);
-%             sRate=data.fsample;
             data=data(megi,:);
-%             figOptions.label=meg.label;
-%             figOptions.layout='neuromag306mag.lay';
-%            clear mag
-            %[cleanMEG,tempMEG,periodMEG,mcgMEG,RtopoMEG]=correctHB(meg.trial{1,1},meg.fsample,0,meanMAG);
-            
+        end
+    elseif strcmp(dataType,'ctf')
+        if isempty(which('ctf_read'))
+            error('to read ctf data you should have ctf_read.m in path')
+        else
+            ctf = ctf_read(data);
+            megi=ctf.sensor.index.meg;
+            data=ctf.data{1}(:,megi)';
+            if length(ctf.data)>1
+                for segi=2:length(ctf.data)
+                    data=[data,ctf.data{segi}(:,megi)'];
+                end
+            end
+            if isempty(find(data(:,end)))
+                realEnd=find(fliplr(sum(data)),1);
+                data=data(:,1:size(data,2)-realEnd+1);
+            end
+            sRate=ctf.setup.sample_rate;
+            clear ctf
+            cd(PWD)
         end
     end
 end
@@ -294,8 +309,9 @@ if ~isempty(ECG)
     meanMEG=ECG;
     %meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 else
-        meanMEG=double(mean(data(1:lastMEG,:)));
+    meanMEG=double(mean(data(1:lastMEG,:)));
 end
+meanMEG=meanMEG-median(meanMEG(1:sRate));
 if ~isempty(meanMEGhpFilt)
     mmhpObj  = fdesign.highpass('N,F3dB', 10, meanMEGhpFilt, sRate);
     mmhpFilt=design(mmhpObj ,'butter');
@@ -431,7 +447,7 @@ else
 end
 if isempty(ECG)
     meanMEG=double(mean(data(1:lastMEG,:)));
-        
+    
     meanMEG(end-sampBefore+1:end)=median(meanMEG(end-2*sampBefore:end-sampBefore));
     if ~isempty(meanMEGhpFilt)
         meanMEG=meanMEG-mean(meanMEG(1:sampBefore));
@@ -700,7 +716,7 @@ maxi=maxi-round(sRate/100)+mi-1;
 % sAft=length(templateHB)-maxi;
 % HBtemp=HBbyChan(data,Ipeaks2in,sBef,sAft,repressTime);
 % meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
-% 
+%
 if length(ampFiltFreq)==1
     HighPassSpecObj=fdesign.highpass('Fst,Fp,Ast,Ap',ampFiltFreq-1,ampFiltFreq,60,1,sRate);%
     HighPassFilt=design(HighPassSpecObj ,'butter');
@@ -817,7 +833,7 @@ switch ampMethod
     case '5cat' % 5 categories of HB
         [~,sorted]=sort(ampMMfit);
         len=floor(length(sorted)/5);
-            
+        
         for chani=1:lastMEG
             MCGall=zeros(size(meanMEG));
             for cati=1:5
@@ -920,14 +936,14 @@ if EK <3
     fprintf(2,txt);
     diary off
 end
-if nargout==0 
+if nargout==0
     if strcmp(dataType,'4D')
-    display('saving hb* file')
-    if doX
-        rewrite_pdf(data,labels,ipFileName,'hb')
-    else
-        rewrite_pdf(data,[],ipFileName,'hb')
-    end
+        display('saving hb* file')
+        if doX
+            rewrite_pdf(data,labels,ipFileName,'hb')
+        else
+            rewrite_pdf(data,[],ipFileName,'hb')
+        end
     elseif strcmp(dataType,'fif')
         copyfile(infile,outfile);
         [outfid,cals] = fiff_start_writing_raw(outfile,raw.info);
@@ -996,7 +1012,7 @@ if length(ipxc)>1
         period4=median(diff(ipxc))/sRate;
     end
 else
-%    warning('could not find cross correlation within extended template, guessing period')
+    %    warning('could not find cross correlation within extended template, guessing period')
     period4=period;
 end
 temp=HB(sampBefore-round(sRate*beforeHBs*period4):sampBefore+round(sRate*afterHBs*period4));
