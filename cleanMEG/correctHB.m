@@ -240,6 +240,10 @@ if ischar(data)
         end
         display(['reading ',var4DfileName]);
         data = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
+        if ischar(ECG)
+            var4Dchi = channel_index(var4Dp, ECG, 'name');
+            ECG = read_data_block(var4Dp,[1 var4DnSamp],var4Dchi);
+        end
         %data=double(data);
         if figs
             var4Dlabel=channel_label(var4Dp,var4Dchi)';
@@ -306,26 +310,36 @@ if ~exist('lastMEG','var')
 end
 
 if ~isempty(ECG)
+    fECG=abs(fftBasic(ECG,sRate));
+    blECG=mean(fECG(5:25));
+    if fECG(60)/blECG>2 || fECG(50)/blECG>2
+        ECG=correctLF(ECG,sRate);
+        title('cleaned ECG channel')
+    end
     meanMEG=ECG;
     %meanMEGdt=detrend(meanMEG,'linear',round(sRate:sRate:length(meanMEG)));
 else
     meanMEG=double(mean(data(1:lastMEG,:)));
 end
-meanMEG=meanMEG-median(meanMEG(1:sRate));
+meanMEG=meanMEG-median(meanMEG(1:round(sRate)));
 if ~isempty(meanMEGhpFilt)
     mmhpObj  = fdesign.highpass('N,F3dB', 10, meanMEGhpFilt, sRate);
     mmhpFilt=design(mmhpObj ,'butter');
     meanMEG=myFilt(meanMEG,mmhpFilt);
 end
 repressTime=default('repressTime',round(sRate/50),cfg);
-%% pad with zeros for template slide
+%% pad with zeros (or with some baseline constant) for template slide
 sampBefore=round(sRate*maxPeriod);
 time=-sampBefore/sRate:1/sRate:(size(data,2)+sampBefore)/sRate;
 time=time(2:end);
-meanMEG=[zeros(1,sampBefore),meanMEG,zeros(1,sampBefore)];
-meanMEG(end-sampBefore+1:end)=median(meanMEG(end-2*sampBefore:end-sampBefore));
-data=[zeros(size(data,1),sampBefore),data,zeros(size(data,1),sampBefore)];
-data(:,end-sampBefore+1:end)=repmat(median(data(:,end-2*sampBefore:end-sampBefore),2),1,sampBefore);
+BL0=median(meanMEG(1:sampBefore));
+BL1=median(meanMEG(end-sampBefore+1:end));
+meanMEG=[ones(1,sampBefore)*BL0,meanMEG,ones(1,sampBefore)*BL1];
+%meanMEG(end-sampBefore+1:end)=median(meanMEG(end-2*sampBefore:end-sampBefore));
+BL0=median(data(:,1:sampBefore),2);
+BL1=median(data(:,end-sampBefore+1:end),2);
+data=[repmat(BL0,1,sampBefore),data,repmat(BL1,1,sampBefore)];
+%data(:,end-sampBefore+1:end)=repmat(median(data(:,end-2*sampBefore:end-sampBefore),2),1,sampBefore);
 %% Filter data if requested
 if ~isempty(dataFiltFreq)
     display('filtering the data')
@@ -461,29 +475,28 @@ disp('looking for HB peaks')
 [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*minPeriod)); % 450ms interval minimum
 % test if, by chance, the HB field is mainly negative
 posHB=true;
-if isempty(ECG)
-    [peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,peakZthr,round(sRate*minPeriod));
-    if median(peaksNeg)/median(peaks)>1.1
-        diary('HBlog.txt')
-        warning('NEGATIVE HB FIELD? if not, average selected MEG channels and give it as ECG');
-        diary off
-        period1=median(diff(IpeaksNeg))./sRate;
-        if period1<2
-            [peaks, Ipeaks]=findPeaks(-meanMEGf,peakZthr,round(sRate*period1*0.6));
-            peaks=-peaks;
-        else
-            Ipeaks=IpeaksNeg;
-            peaks=-peaksNeg;
-        end
-        posHB=false;
-        %meanMEGf=-meanMEGf;
+[peaksNeg, IpeaksNeg]=findPeaks(-meanMEGf,peakZthr,round(sRate*minPeriod));
+if median(peaksNeg)/median(peaks)>1.1
+    diary('HBlog.txt')
+    warning('NEGATIVE HEARTBEATS?');
+    diary off
+    period1=median(diff(IpeaksNeg))./sRate;
+    if period1<2
+        [peaks, Ipeaks]=findPeaks(-meanMEGf,peakZthr,round(sRate*period1*0.6));
+        peaks=-peaks;
     else
-        period1=median(diff(Ipeaks))./sRate;
-        if period1<2 %#ok<*BDSCI> %try to improve peak detection if peak intervals are reasonable
-            [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*period1*0.6)); % 450ms interval
-        end
+        Ipeaks=IpeaksNeg;
+        peaks=-peaksNeg;
+    end
+    posHB=false;
+    %meanMEGf=-meanMEGf;
+else
+    period1=median(diff(Ipeaks))./sRate;
+    if period1<2 %#ok<*BDSCI> %try to improve peak detection if peak intervals are reasonable
+        [peaks, Ipeaks]=findPeaks(meanMEGf,peakZthr,round(sRate*period1*0.6)); % 450ms interval
     end
 end
+
 if figs
     figure;
     plot(time,meanMEGf)
@@ -492,47 +505,47 @@ if figs
     title('peak detection on mean MEG (or ECG) trace, OK if many of them are not HB')
 end
 %% get topography
-if figs
-    if isfield(figOptions,'layout') && isfield(figOptions,'label')
-        topo={};
-        topo.avg=median(data(1:lastMEG,Ipeaks),2);
-        topo.time=0;
-        topo.label=figOptions.label;
-        topo.dimord='chan_time';
-        cfgp=[];
-        cfgp.layout=figOptions.layout;
-        if ~isempty(badc)
-            cfgp.channel=setdiff(1:length(topo.label),badc);
-        end
-        if strcmp(cfgp.layout,'neuromag306mag.lay')
-            [~,magi]=ismember({'MEG0111';'MEG0121';'MEG0131';'MEG0141';'MEG0211';'MEG0221';'MEG0231';'MEG0241';'MEG0311';'MEG0321';'MEG0331';'MEG0341';'MEG0411';'MEG0421';'MEG0431';'MEG0441';'MEG0511';'MEG0521';'MEG0531';'MEG0541';'MEG0611';'MEG0621';'MEG0631';'MEG0641';'MEG0711';'MEG0721';'MEG0731';'MEG0741';'MEG0811';'MEG0821';'MEG0911';'MEG0921';'MEG0931';'MEG0941';'MEG1011';'MEG1021';'MEG1031';'MEG1041';'MEG1111';'MEG1121';'MEG1131';'MEG1141';'MEG1211';'MEG1221';'MEG1231';'MEG1241';'MEG1311';'MEG1321';'MEG1331';'MEG1341';'MEG1411';'MEG1421';'MEG1431';'MEG1441';'MEG1511';'MEG1521';'MEG1531';'MEG1541';'MEG1611';'MEG1621';'MEG1631';'MEG1641';'MEG1711';'MEG1721';'MEG1731';'MEG1741';'MEG1811';'MEG1821';'MEG1831';'MEG1841';'MEG1911';'MEG1921';'MEG1931';'MEG1941';'MEG2011';'MEG2021';'MEG2031';'MEG2041';'MEG2111';'MEG2121';'MEG2131';'MEG2141';'MEG2211';'MEG2221';'MEG2231';'MEG2241';'MEG2311';'MEG2321';'MEG2331';'MEG2341';'MEG2411';'MEG2421';'MEG2431';'MEG2441';'MEG2511';'MEG2521';'MEG2531';'MEG2541';'MEG2611';'MEG2621';'MEG2631';'MEG2641'},topo.label);
-            %topo.avg=topo.avg(chi);
-            %topo.label=topo.label(chi);
-            cfgp.xlim=[1,1];
-            cfgp.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
-            figure;
-            ft_topoplotER(cfgp,topo);
-            title('MAGNETOMETERS, TOPOGRAPHY OF R')
-            % cfg.layout='neuromag306planar.lay';
-            % grd=topo.avg;
-            % grd(chi)=0;
-            % cfg.zlim=[-max(abs(grd)) max(abs(grd))];
-            % figure;
-            % ft_topoplotER(cfg,topo);
-            % title('GRADIOMETERS')
-        else
-            %cfg.channel={'MEG0111';'MEG0121';'MEG0131';'MEG0141';'MEG0211';'MEG0221';'MEG0231';'MEG0241';'MEG0311';'MEG0321';'MEG0331';'MEG0341';'MEG0411';'MEG0421';'MEG0431';'MEG0441';'MEG0511';'MEG0521';'MEG0531';'MEG0541';'MEG0611';'MEG0621';'MEG0631';'MEG0641';'MEG0711';'MEG0721';'MEG0731';'MEG0741';'MEG0811';'MEG0821';'MEG0911';'MEG0921';'MEG0931';'MEG0941';'MEG1011';'MEG1021';'MEG1031';'MEG1041';'MEG1111';'MEG1121';'MEG1131';'MEG1141';'MEG1211';'MEG1221';'MEG1231';'MEG1241';'MEG1311';'MEG1321';'MEG1331';'MEG1341';'MEG1411';'MEG1421';'MEG1431';'MEG1441';'MEG1511';'MEG1521';'MEG1531';'MEG1541';'MEG1611';'MEG1621';'MEG1631';'MEG1641';'MEG1711';'MEG1721';'MEG1731';'MEG1741';'MEG1811';'MEG1821';'MEG1831';'MEG1841';'MEG1911';'MEG1921';'MEG1931';'MEG1941';'MEG2011';'MEG2021';'MEG2031';'MEG2041';'MEG2111';'MEG2121';'MEG2131';'MEG2141';'MEG2211';'MEG2221';'MEG2231';'MEG2241';'MEG2311';'MEG2321';'MEG2331';'MEG2341';'MEG2411';'MEG2421';'MEG2431';'MEG2441';'MEG2511';'MEG2521';'MEG2531';'MEG2541';'MEG2611';'MEG2621';'MEG2631';'MEG2641'};
-            %cfg.interpolation='linear';
-            cfgp.xlim=[1,1];
-            cfgp.zlim=[-max(abs(topo.avg)) max(abs(topo.avg))];
-            figure;
-            ft_topoplotER(cfgp,topo);
-            title('TOPOGRAPHY OF R')
-        end
-    else
-        warning('no topoplot without labels and layout fields! see figOptions options')
-    end
-end
+% if figs
+%     if isfield(figOptions,'layout') && isfield(figOptions,'label')
+%         topo={};
+%         topo.avg=median(data(1:lastMEG,Ipeaks),2);
+%         topo.time=0;
+%         topo.label=figOptions.label;
+%         topo.dimord='chan_time';
+%         cfgp=[];
+%         cfgp.layout=figOptions.layout;
+%         if ~isempty(badc)
+%             cfgp.channel=setdiff(1:length(topo.label),badc);
+%         end
+%         if strcmp(cfgp.layout,'neuromag306mag.lay')
+%             [~,magi]=ismember({'MEG0111';'MEG0121';'MEG0131';'MEG0141';'MEG0211';'MEG0221';'MEG0231';'MEG0241';'MEG0311';'MEG0321';'MEG0331';'MEG0341';'MEG0411';'MEG0421';'MEG0431';'MEG0441';'MEG0511';'MEG0521';'MEG0531';'MEG0541';'MEG0611';'MEG0621';'MEG0631';'MEG0641';'MEG0711';'MEG0721';'MEG0731';'MEG0741';'MEG0811';'MEG0821';'MEG0911';'MEG0921';'MEG0931';'MEG0941';'MEG1011';'MEG1021';'MEG1031';'MEG1041';'MEG1111';'MEG1121';'MEG1131';'MEG1141';'MEG1211';'MEG1221';'MEG1231';'MEG1241';'MEG1311';'MEG1321';'MEG1331';'MEG1341';'MEG1411';'MEG1421';'MEG1431';'MEG1441';'MEG1511';'MEG1521';'MEG1531';'MEG1541';'MEG1611';'MEG1621';'MEG1631';'MEG1641';'MEG1711';'MEG1721';'MEG1731';'MEG1741';'MEG1811';'MEG1821';'MEG1831';'MEG1841';'MEG1911';'MEG1921';'MEG1931';'MEG1941';'MEG2011';'MEG2021';'MEG2031';'MEG2041';'MEG2111';'MEG2121';'MEG2131';'MEG2141';'MEG2211';'MEG2221';'MEG2231';'MEG2241';'MEG2311';'MEG2321';'MEG2331';'MEG2341';'MEG2411';'MEG2421';'MEG2431';'MEG2441';'MEG2511';'MEG2521';'MEG2531';'MEG2541';'MEG2611';'MEG2621';'MEG2631';'MEG2641'},topo.label);
+%             %topo.avg=topo.avg(chi);
+%             %topo.label=topo.label(chi);
+%             cfgp.xlim=[1,1];
+%             cfgp.zlim=[-max(abs(topo.avg(magi))) max(abs(topo.avg(magi)))];
+%             figure;
+%             ft_topoplotER(cfgp,topo);
+%             title('MAGNETOMETERS, TOPOGRAPHY OF R')
+%             % cfg.layout='neuromag306planar.lay';
+%             % grd=topo.avg;
+%             % grd(chi)=0;
+%             % cfg.zlim=[-max(abs(grd)) max(abs(grd))];
+%             % figure;
+%             % ft_topoplotER(cfg,topo);
+%             % title('GRADIOMETERS')
+%         else
+%             %cfg.channel={'MEG0111';'MEG0121';'MEG0131';'MEG0141';'MEG0211';'MEG0221';'MEG0231';'MEG0241';'MEG0311';'MEG0321';'MEG0331';'MEG0341';'MEG0411';'MEG0421';'MEG0431';'MEG0441';'MEG0511';'MEG0521';'MEG0531';'MEG0541';'MEG0611';'MEG0621';'MEG0631';'MEG0641';'MEG0711';'MEG0721';'MEG0731';'MEG0741';'MEG0811';'MEG0821';'MEG0911';'MEG0921';'MEG0931';'MEG0941';'MEG1011';'MEG1021';'MEG1031';'MEG1041';'MEG1111';'MEG1121';'MEG1131';'MEG1141';'MEG1211';'MEG1221';'MEG1231';'MEG1241';'MEG1311';'MEG1321';'MEG1331';'MEG1341';'MEG1411';'MEG1421';'MEG1431';'MEG1441';'MEG1511';'MEG1521';'MEG1531';'MEG1541';'MEG1611';'MEG1621';'MEG1631';'MEG1641';'MEG1711';'MEG1721';'MEG1731';'MEG1741';'MEG1811';'MEG1821';'MEG1831';'MEG1841';'MEG1911';'MEG1921';'MEG1931';'MEG1941';'MEG2011';'MEG2021';'MEG2031';'MEG2041';'MEG2111';'MEG2121';'MEG2131';'MEG2141';'MEG2211';'MEG2221';'MEG2231';'MEG2241';'MEG2311';'MEG2321';'MEG2331';'MEG2341';'MEG2411';'MEG2421';'MEG2431';'MEG2441';'MEG2511';'MEG2521';'MEG2531';'MEG2541';'MEG2611';'MEG2621';'MEG2631';'MEG2641'};
+%             %cfg.interpolation='linear';
+%             cfgp.xlim=[1,1];
+%             cfgp.zlim=[-max(abs(topo.avg)) max(abs(topo.avg))];
+%             figure;
+%             ft_topoplotER(cfgp,topo);
+%             title('TOPOGRAPHY OF R')
+%         end
+%     else
+%         warning('no topoplot without labels and layout fields! see figOptions options')
+%     end
+% end
 topoTrace=median(data(1:lastMEG,Ipeaks),2)'*data(1:lastMEG,:);
 topoTrace(end-sampBefore+1:end)=median(topoTrace(end-2*sampBefore:end-sampBefore));
 topoTrace=topoTrace-mean(topoTrace(1:sampBefore));
@@ -825,6 +838,12 @@ HBtimes=(Ipeaks2in-sampBefore)/sRate;
 [avgHB,avgTimes]=meanHB(data(1:lastMEG,sampBefore+1:end-sampBefore),sRate,HBtimes);
 % clean
 display('cleaning channels from template one by one, may take half a minute')
+if max(max(templateHB))/max(max(avgHB))>10000 % ECG template MEG signal
+    if ampLinThr~=0
+        warning('will not try to fit amplitude of each HB, I think the template is ECG and the data is MEG')
+        ampLinThr=0;
+    end
+end
 if ampLinThr==0
     ampMethod='HBbyHB';
     %not to make 5 categories
