@@ -21,7 +21,7 @@ p=pdf4D(fileName);
 chi = channel_index(p, 'meg', 'name');
 Fs=get(p,'dr');
 startSamp=max(round(startTime.*Fs), 1);
-if ~exist('duration')
+if ~exist('duration','var')
     hdr=get(p,'header');
     endTime=hdr.epoch_data{1}.epoch_duration;
     endSamp=ceil(endTime.*Fs);

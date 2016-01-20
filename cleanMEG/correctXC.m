@@ -29,6 +29,8 @@ plot(f0(1:120),'r');
 ylabel('PSD')
 xlabel('Hz')
 hold on
-f1=median(abs(fftRaw(['xc,',fileName])));
+[Path, name, ext] = fileparts(fileName);
+f1=median(abs(fftRaw(fullfile(Path,['xc,',name,ext]))));
+%f1=median(abs(fftRaw(['xc,',fileName])));
 plot(f1(1:120),'g');
 
