@@ -22,7 +22,7 @@ if ~exist('fileName','var')
     end
 end
 p=pdf4D(fileName);
-cleanCoefs = createCleanFile(p, fileName,'byLF',0 ,'xClean',[4,5,6],'byFFT',0,'HeartBeat',0);
+cleanCoefs = createCleanFile(p, fileName,'byLF',0 ,'xClean',[4,5,6],'byFFT',0,'HeartBeat',0,'outLierMargin',40);
 f0=median(abs(fftRaw(fileName)));
 figure;
 plot(f0(1:120),'r');

@@ -77,7 +77,7 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %  be assesed by r, the average HB amp will be given. use cfg.ampLinThr =
 %  0; for not adjusting amplitude HB by HB, remove mean template as is for
 %  every HB (good when HB are rather small).
-%  - cfg.ampMethod can be '5cat' (five HB size categories) or 'HBbyHB'
+%  - cfg.ampMethod can be '5cat' (five HB size categories), '1size' to make one size template for all HB, or 'HBbyHB'
 %  (correct each HB by the amplitude estimate, less recommended).
 %  - cfg.afterHBs (0.7 of the period) is how long the template should continue after the
 % peak (seconds)
@@ -844,8 +844,12 @@ if max(max(templateHB))/max(max(avgHB))>10000 % ECG template MEG signal
         ampLinThr=0;
     end
 end
+if strcmp(ampMethod,'1size')
+    ampLinThr=0;
+end
 if ampLinThr==0
     ampMethod='HBbyHB';
+    disp('Using one size templae for all heartbeats')
     %not to make 5 categories
 end
 switch ampMethod
