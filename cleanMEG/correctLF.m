@@ -155,10 +155,10 @@ if isempty(data) || exist('var4DfileName','var');
     if strcmp(cnf.config_data.site_name,'Bar Ilan')
         barilan=true;
         biuFileName=var4DfileName;
-        if ~isfield(cfg,'jobs')
-            cfg.jobs=2;
-            jobs=default('jobs',[],cfg);
-        end
+%         if ~isfield(cfg,'jobs')
+%             cfg.jobs=2;
+%             jobs=default('jobs',[],cfg);
+%         end
     else
         barilan=false;
     end
