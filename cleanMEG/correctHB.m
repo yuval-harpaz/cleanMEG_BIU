@@ -19,9 +19,7 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 % I recommend 'neuromag306mag.lay' for neuromag users even if data includes also grads.
 % - ECG can be ECG (useful for ctf users) or a mean of subset of MEG channels where the HB is
 % visible. Neuromag users can put there the mean of the magnetometers to
-% clean both magnetometers and gradiometers included in data. This is the
-% only filter that actually changes the data. The rest are for better
-% processing of HB.
+% clean both magnetometers and gradiometers included in data.
 %
 % cfg
 %
@@ -40,7 +38,9 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %
 %% cfg options
 %  - cfg.dataFiltFreq is a filtering option  for the data (and meanMEG) to get rid of low
-% frequencies (DC recordings). Not performed by default.
+% frequencies (DC recordings). Not performed by default. This is the
+% only filter that actually changes the data. The rest are for better
+% processing of HB.
 %  - cfg.chanSnrThr (default 0) is the threshold (in z scores) that tell which channels are cleaned and which
 % remain as are. Use 0 to clean all. SNR here is how much heartbeat peak
 % there is in each channel. You may want not to clean channels that are
@@ -87,6 +87,9 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %  the edges.
 %
 %% output
+% NOTE !!! if you give no op argument MEG data will be saved
+% 4D and neuromag to native format, ctf to FieldTrip structure
+% (continuous).
 %  - data is a matrix of cleaned data
 %  - HBtimes is the times when HB peaks were detected
 %  - templateHB is the average HB
@@ -300,7 +303,43 @@ if ischar(data)
                 data=data(:,1:size(data,2)-realEnd+1);
             end
             sRate=ctf.setup.sample_rate;
-            clear ctf
+            ecgi=[];
+            % try reading ECG data
+            if isempty(ECG)
+                [~,ecgi]=ismember('ECG',ctf.sensor.label);
+                if ecgi==0
+                    ecgi=ctf.sensor.index.eeg;
+                end
+            elseif ischar(ECG)
+                [~,ecgi]=ismember(ECG,ctf.sensor.label);
+            elseif length(ECG)==1
+                ecgi=ECG;
+            end
+            
+            if ~isempty(ecgi) % ECG channel not supplied and some EEG channels found
+                ecg=ctf.data{1}(:,ecgi)';
+                if length(ctf.data)>1
+                    for segi=2:length(ctf.data)
+                        ecg=[ecg,ctf.data{segi}(:,ecgi)'];
+                    end
+                end
+                if exist('realEnd','var')
+                    ecg=ecg(:,1:size(ecg,2)-realEnd+1);
+                end
+                if size(ecg,1)>1
+                    %kur=kurtosis(ecg');
+                    kur=kurLoop(ecg,sRate);
+                    [~,maxKur]=max(kur);
+                    ecg=ecg(maxKur,:);
+                end
+                ECG=ecg;
+                clear ecg
+            end
+            if exist('/home/yuval/Data/OMEGA','dir')
+                save ctf ctf -v7.3
+            end
+            ctf=rmfield(ctf,'data');
+            %clear ctf
             cd(PWD)
         end
     end
@@ -836,6 +875,11 @@ clear MEGmean;
 % prepare avg HB fig
 HBtimes=(Ipeaks2in-sampBefore)/sRate;
 [avgHB,avgTimes]=meanHB(data(1:lastMEG,sampBefore+1:end-sampBefore),sRate,HBtimes);
+Rtopo=HBtemp(:,maxi);
+sign=2*((Rtopo>0)-0.5);
+if strcmp(dataType,'ctf')
+    meanDataSigned=sign'*data;
+end
 % clean
 display('cleaning channels from template one by one, may take half a minute')
 if max(max(templateHB))/max(max(avgHB))>10000 % ECG template MEG signal
@@ -899,22 +943,33 @@ switch ampMethod
         end
 end
 %cleanData=data-MCGall;
+
 figure;
-if isempty(ECG)
-    plot(time,MCG,'k')
-else
-    scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(data(1:lastMEG,sampBefore+1:sampBefore+round(sRate*5)))));
+
+if strcmp(dataType,'ctf')
+
+    scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(meanDataSigned(sampBefore+1:sampBefore+round(sRate*5))));
     plot(time,meanMEG/scale,'k')
+    hold on
+    plot(time,meanDataSigned,'r')
+    plot(time,sign'*data,'g');
+else
+    if isempty(ECG)
+        plot(time,MCG,'k')
+    else
+        scale=max(abs(MCG(sampBefore+1:sampBefore+round(sRate*5))))/max(abs(mean(data(1:lastMEG,sampBefore+1:sampBefore+round(sRate*5)))));
+        plot(time,meanMEG/scale,'k')
+    end
+    hold on
+    plot(time,meanData,'r')
+    plot(time,mean(data(1:lastMEG,:)),'g')
 end
-hold on
-plot(time,meanData,'r')
-plot(time,mean(data(1:lastMEG,:)),'g')
 if isempty(ECG)
     legend('MCG from template', 'mean MEG','mean clean MEG')
 else
     legend('rescaled ECG', 'mean MEG','mean clean MEG')
 end
-Rtopo=HBtemp(:,maxi);
+
 if figs
     if isfield(figOptions,'layout')
         topo.avg=Rtopo;
@@ -933,10 +988,19 @@ if figs
     end
 end
 avgHBclean=meanHB(data(1:lastMEG,sampBefore+1:end-sampBefore),sRate,HBtimes);
-figure;plot(avgTimes,mean(avgHB),'r')
-hold on
-plot(avgTimes,mean(avgHBclean),'g')
-title('averaged heartbeat, before (red) and after')
+if strcmp(dataType,'ctf')
+    avgHBclean=meanHB(data(1:lastMEG,sampBefore+1:end-sampBefore),sRate,HBtimes);
+    avgHBclean=sign'*avgHBclean;
+    figure;plot(avgTimes,sign'*avgHB,'r')
+    hold on
+    plot(avgTimes,avgHBclean,'g')
+    title('averaged heartbeat, before (red) and after')
+else
+    figure;plot(avgTimes,mean(avgHB),'r')
+    hold on
+    plot(avgTimes,mean(avgHBclean),'g')
+    title('averaged heartbeat, before (red) and after')
+end
 %display(['HB period (2nd sweep) is ',num2str(period4),'s']);
 if ~isempty(bads);
     data(:,bads)=badData;
@@ -960,23 +1024,45 @@ if EK <3
     diary off
 end
 if nargout==0
-    if strcmp(dataType,'4D')
-        display('saving hb* file')
-        if doX
-            rewrite_pdf(data,labels,ipFileName,'hb')
-        else
-            rewrite_pdf(data,[],ipFileName,'hb')
-        end
-    elseif strcmp(dataType,'fif')
-        copyfile(infile,outfile);
-        [outfid,cals] = fiff_start_writing_raw(outfile,raw.info);
-        dataAll = fiff_read_raw_segment(raw,raw.first_samp,raw.last_samp);
-        dataAll(megi,:)=data;
-        clear data
-        fiff_write_raw_buffer(outfid,dataAll,cals);
-        fiff_finish_writing_raw(outfid);
-        data=dataAll(megi,:);
-        clear dataAll
+    switch dataType
+        case '4D'
+            display('saving hb* file')
+            if doX
+                rewrite_pdf(data,labels,ipFileName,'hb')
+            else
+                rewrite_pdf(data,[],ipFileName,'hb')
+            end
+        case 'fif'
+            copyfile(infile,outfile);
+            [outfid,cals] = fiff_start_writing_raw(outfile,raw.info);
+            dataAll = fiff_read_raw_segment(raw,raw.first_samp,raw.last_samp);
+            dataAll(megi,:)=data;
+            clear data
+            fiff_write_raw_buffer(outfid,dataAll,cals);
+            fiff_finish_writing_raw(outfid);
+            data=dataAll(megi,:);
+            clear dataAll
+        case 'ctf'
+            prepPath=which('ft_preprocessing');
+            if isempty(prepPath)
+                warning('if you had ft_preprocessing function in path I would have saved the data to a fieldtrip structure')
+            else
+                cfg=[];
+                cfg.dataset=pwd;
+                cfg.channel=ctf.sensor.label{1};
+                cfg.continuous='yes';
+                cfg.feedback='none';
+                cfg.trl=[1 5 1];
+                HBdata=ft_preprocessing(cfg);
+                HBdata.trial={};
+                HBdata.trial{1}=data;
+                clear data
+                HBdata.label=ctf.sensor.label(megi)';
+                HBdata.time={};
+                HBdata.time{1}=0:1/sRate:size(HBdata.trial{1},2)./sRate-1/sRate;
+                display('saving HBdata.mat, FieldTrip structure with the cleaned stuff in it')
+                save HBdata HBdata ECG -v7.3
+            end
     end
 end
 
