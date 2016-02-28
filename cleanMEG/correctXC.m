@@ -30,7 +30,11 @@ ylabel('PSD')
 xlabel('Hz')
 hold on
 [Path, name, ext] = fileparts(fileName);
-f1=median(abs(fftRaw(fullfile(Path,['xc,',name,ext]))));
+try
+    f1=median(abs(fftRaw(fullfile(Path,['xc,',name,ext]))));
+catch
+    f1=median(abs(fftRaw(fullfile(Path,['xc_',name,ext]))));
+end
 %f1=median(abs(fftRaw(['xc,',fileName])));
 plot(f1(1:120),'g');
 

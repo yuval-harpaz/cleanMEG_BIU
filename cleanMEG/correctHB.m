@@ -207,7 +207,7 @@ if ischar(data)
         dataType='ctf';
     else
         if ~strcmp(dataType,'4D') && ~strcmp(data(end-3:end),'.mat')
-            if ~isempty(findstr('c,rf',data))
+            if ~isempty(findstr(',rf',data))
                 dataType='4D';
             end
         end
@@ -900,8 +900,7 @@ switch ampMethod
     case '5cat' % 5 categories of HB
         [~,sorted]=sort(ampMMfit);
         len=floor(length(sorted)/5);
-        
-        for chani=1:lastMEG
+        for chani=1:size(data,1)
             MCGall=zeros(size(meanMEG));
             for cati=1:5
                 if cati<5

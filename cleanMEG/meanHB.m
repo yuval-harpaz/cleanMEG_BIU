@@ -2,6 +2,19 @@ function [avgHB,times]=meanHB(data,sRate,HBtimes,plt);
 if ~exist ('plt','var')
     plt=false;
 end
+if ischar(data)
+    if isempty(which('ft_preprocessing'))
+        error('data file name needs FieldTrip in path')
+    else
+        cfg=[];
+        cfg.dataset=data;
+        cfg.demean='yes';
+        cfg.continuous='yes';
+        cfg.channel='MEG';
+        data=ft_preprocessing(cfg);
+        data=data.trial{1};
+    end
+end
 HBsamp=round(HBtimes*sRate);
 avgHB=zeros(size(data,1),round(sRate)*2+1);
 counter=0;
