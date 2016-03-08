@@ -53,7 +53,7 @@ function [data,HBtimes,templateHB,Period,MCG,Rtopo]=correctHB(data,sRate,figOpti
 %  other extreme cases, but he is now in Costa Rica
 %  - cfg.chanZthr (20) z-score for declaring bad channels. A channel is bad
 %  if it surpasses this value for 3 seconds in the beginning.
-%  - cfg.badChan ([]) is the index of bad channel. if you specify this badChan
+%  - cfg.badChan ([]) is the indices of bad channels. if you specify this, badChan
 %  will not be self determined. cfg.chanZthr will be ignored. 4D users -
 %  for bad A204 use cfg.badChan=204;
 %  - cfg.jPad (1) how much to zero pad before and after jump
@@ -334,9 +334,6 @@ if ischar(data)
                 end
                 ECG=ecg;
                 clear ecg
-            end
-            if exist('/home/yuval/Data/OMEGA','dir')
-                save ctf ctf -v7.3
             end
             ctf=rmfield(ctf,'data');
             %clear ctf
@@ -1052,15 +1049,15 @@ if nargout==0
                 cfg.continuous='yes';
                 cfg.feedback='none';
                 cfg.trl=[1 5 1];
-                HBdata=ft_preprocessing(cfg);
-                HBdata.trial={};
-                HBdata.trial{1}=data;
+                correctHBdata=ft_preprocessing(cfg);
+                correctHBdata.trial={};
+                correctHBdata.trial{1}=data;
                 clear data
-                HBdata.label=ctf.sensor.label(megi)';
-                HBdata.time={};
-                HBdata.time{1}=0:1/sRate:size(HBdata.trial{1},2)./sRate-1/sRate;
-                display('saving HBdata.mat, FieldTrip structure with the cleaned stuff in it')
-                save HBdata HBdata ECG -v7.3
+                correctHBdata.label=ctf.sensor.label(megi)';
+                correctHBdata.time={};
+                correctHBdata.time{1}=0:1/sRate:size(correctHBdata.trial{1},2)./sRate-1/sRate;
+                display('saving correctHBdata.mat, FieldTrip structure with the cleaned stuff in it')
+                save correctHBdata correctHBdata ECG -v7.3
             end
     end
 end
