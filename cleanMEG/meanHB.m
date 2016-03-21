@@ -12,6 +12,9 @@ if ischar(data)
         cfg.continuous='yes';
         cfg.channel='MEG';
         data=ft_preprocessing(cfg);
+        if isempty(sRate)
+            sRate=data.fsample;
+        end
         data=data.trial{1};
     end
 end
