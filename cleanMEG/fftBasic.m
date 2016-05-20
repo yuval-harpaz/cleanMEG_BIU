@@ -13,7 +13,7 @@ end
 if ~exist('keepSegments','var')
     keepSegments=false;
 end
-L = size(rows,2)/Fs;                     % Length of signal
+%L = size(rows,2)/Fs;                     % Length of signal
 NFFT = round(Fs); % this gives bins of roughly  1Hz
 secCount=1;
 if NFFT<=size(rows,2)
@@ -23,10 +23,15 @@ if NFFT<=size(rows,2)
         else
             try % should fail for too short, end of the rows
                 secCount=secCount+1;
+                 segment=rows(:,1:NFFT);
+                    % baseline correction
+                    segment=segment-repmat(mean(segment')',1,size(segment,2));
                 if keepSegments
-                    Y(:,:,secCount)=fft(rows(:,seci:seci+NFFT)',NFFT);
+                    Y = fft(segment',NFFT);
+                    %Y(:,:,secCount)=fft(rows(:,seci:seci+NFFT)',NFFT);
                 else
-                    Y = Y+fft(rows(:,seci:seci+NFFT)',NFFT);
+                    Y = Y+fft(segment',NFFT);
+                    %Y = Y+fft(rows(:,seci:seci+NFFT)',NFFT);
                 end
             end
         end
@@ -36,6 +41,7 @@ if NFFT<=size(rows,2)
     end
 else % short data, less than a second
     NFFT=size(rows,2);
+    % Note, no BL correction here
     Y=fft(rows',NFFT);
 end
 fourier=Y(1:floor(NFFT/2)+1,:,:);
